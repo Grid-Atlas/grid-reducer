@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "grid_reducer"
+dynamic = ["version"]
+description = 'A repository for performing network reduction on distribution network model.'
+readme = "README.md"
+requires-python = ">=3.11"
+license = "BSD-3-Clause"
+keywords = []
+authors = [
+  { name = "Kapil Duwadi", email = "kapil.duwadi@pnnl.gov" },
+  { name = "Kaustav Bhattacharjee", email = "kaustav.bhattacharjee@pnnl.gov"},
+  { name = "Alexander Anderson", email="Alexander.Anderson@pnnl.gov"},
+  { name = "Rabayet Sadnan", email="rabayet.sadnan@pnnl.gov"}
+]
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  "networkx~=3.5",
+  "OpenDSSDirect.py~=0.9.4",
+  "matplotlib~=3.10.3",
+  "fsspec~=2025.5.1",
+  "s3fs~=2025.5.1",
+  "pydantic~=2.11.5",
+  "xxhash~=3.5.0",
+  "pint~=0.24.4",
+  "click~=8.2.1",
+  "scipy~=1.15.3"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pre-commit~=4.2.0", 
+  "pytest~=8.4.0", 
+  "ruff~=0.11.12",
+  "pytest-mock~=3.14.1"
+]
+doc = []
+
+
+[tool.ruff]
+exclude = [".git", ".ruff_cache", ".venv", "_build", "build", "dist", "venv", "altdss"]
+line-length = 99
+indent-width = 4
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "C901", # McCabe complexity
+  "E4",   # imports formatting, wrong import spacing or grouping
+  "E7",   # indentation issues
+  "E9",   # runtime syntax errors
+  "F",    # Pyflakes e.g. unused imports, undefined variables, redefined functions
+  "W",    # minor style line line breaks, training whitespaces
+  "B",    # flake8-bugbear
+]
+ignore = ["C901"]
+
+[project.scripts]
+grid = "grid_reducer.cli.cli:cli"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[project.urls]
+Documentation = "https://github.com/grid-atlas/grid-reducer"
+Issues = "https://github.com/grid-atlas/grid-reducer/-/issues"
+Source = "https://github.com/grid-atlas/grid-reducer"
+
+[tool.hatch.version]
+path = "src/grid_reducer/version.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+testpaths = ["tests"]
+addopts = "-p no:faulthandler"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/grid_reducer"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/grid_reducer"]

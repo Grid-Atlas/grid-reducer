@@ -1,0 +1,33 @@
+stages:
+  - test
+  - lint
+
+variables:
+  PYTHON_VERSION: "3.11"  # You can adjust this to your desired Python version
+
+# The test job
+test:
+  stage: test
+  image: python:$PYTHON_VERSION  # Use a Python Docker image
+  before_script:
+    - pip install --upgrade pip  # Upgrade pip to the latest version
+    - pip install -e '.[dev]' # Install dependencies from requirements.txt
+  script:
+    - cd tests
+    - pytest . 
+  only:
+    - merge_requests
+    - branches
+
+lint:
+  stage: lint
+  image: python:$PYTHON_VERSION  # Use a Python Docker image
+  before_script:
+    - pip install --upgrade pip  # Upgrade pip to the latest version
+    - pip install -e '.[dev]' # Install dependencies from requirements.txt
+  script:
+    - ruff check src 
+  only:
+    - merge_requests
+    - branches
+
