@@ -11,12 +11,14 @@ from grid_reducer.opendss import OpenDSS
 from grid_reducer.reducer import OpenDSSModelReducer
 
 root_folder = Path(__file__).parent / "data"
-files = [root_folder / "ieee" / "IEEE13Nodeckt.dss", root_folder / "smartds" / "Master.dss"]
-
 additional_data_folder = Path(__file__).parent / "../data"
-if additional_data_folder.exists():
-    pattern = re.compile(r".*master\.dss$", re.IGNORECASE)
-    files += [f for f in additional_data_folder.rglob("*.dss") if pattern.search(f.name)]
+test_folders = [root_folder, additional_data_folder]
+
+files = []
+for folder in test_folders:
+    if folder.exists():
+        pattern = re.compile(r".*master\.dss$", re.IGNORECASE)
+        files += [f for f in folder.rglob("*.dss") if pattern.search(f.name)]
 
 
 @pytest.mark.parametrize("file", files)
