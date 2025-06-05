@@ -37,7 +37,7 @@ def aggregate_lines(lines: list[T]) -> T:
     for field in common_fields:
         common_values_dict[field] = getattr(lines[0], field)
 
-    new_line_name = generate_short_name("".join([line.Name for line in lines]))
+    new_line_name = generate_short_name()
     bus1, bus2 = _find_start_end_buses_set_based(lines)
     total_length = sum([Quantity(line.Length, line.Units.value) for line in lines]).to("m")
     return line_class(

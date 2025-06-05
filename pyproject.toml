@@ -28,7 +28,6 @@ dependencies = [
   "fsspec~=2025.5.1",
   "s3fs~=2025.5.1",
   "pydantic~=2.11.5",
-  "xxhash~=3.5.0",
   "pint~=0.24.4",
   "click~=8.2.1",
   "scipy~=1.15.3"
@@ -61,6 +60,7 @@ select = [
   "B",    # flake8-bugbear
 ]
 ignore = ["C901"]
+per-file-ignores = { "__init__.py" = ["F401"] }
 
 [project.scripts]
 grid = "grid_reducer.cli.cli:cli"

@@ -3,7 +3,7 @@ import json
 from typing import Any, Type
 
 import opendssdirect as odd
-import xxhash
+from uuid import uuid4
 from pydantic import BaseModel
 
 from grid_reducer.altdss.altdss_models import Circuit
@@ -52,8 +52,8 @@ def read_json_file(file_path: Path) -> dict:
     return contents
 
 
-def generate_short_name(long_string: str) -> str:
-    return xxhash.xxh32(long_string).hexdigest()[:8]
+def generate_short_name() -> str:
+    return str(uuid4())
 
 
 def get_number_of_phases_from_bus(bus: str) -> int:

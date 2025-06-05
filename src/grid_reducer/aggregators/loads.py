@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from uuid import uuid4
 import math
 from typing import Type
 from collections import defaultdict
@@ -9,6 +8,7 @@ from grid_reducer.utils import (
     get_number_of_phases_from_bus,
     get_tuple_of_values_from_object,
     get_extra_param_values,
+    generate_short_name,
 )
 from grid_reducer.aggregators.registry import register_aggregator
 
@@ -70,7 +70,7 @@ def _aggregate_loads(
 
     new_loads = []
     for _, load_list in value_mapper.items():
-        new_load_name = str(uuid4())  # generate_short_name("".join([load.Name for load in loads]))
+        new_load_name = generate_short_name()
         num_phase = get_number_of_phases_from_bus(bus1)
         base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
         total_kw, total_kvar, total_kva, total_pf = strategy.compute(load_list)
