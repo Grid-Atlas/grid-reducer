@@ -6,7 +6,7 @@ import opendssdirect as odd
 from uuid import uuid4
 from pydantic import BaseModel
 
-from grid_reducer.altdss.altdss_models import Circuit
+from grid_reducer.altdss.altdss_models import Circuit, BusConnection
 
 
 def get_dict_from_opendss(master_file: Path) -> dict:
@@ -115,3 +115,7 @@ def weighted_average_or_none(values, weights):
 
     weighted_sum = sum(v * w for v, w in filtered)
     return weighted_sum / total_weight
+
+
+def extract_bus_name(bus_obj: BusConnection) -> str:
+    return bus_obj.root.split(".")[0]

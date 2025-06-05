@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 from grid_reducer.altdss.altdss_models import SwtControlState
 
-from grid_reducer.altdss.altdss_models import Circuit, BusConnection
-from grid_reducer.utils import get_circuit_bus_name
+from grid_reducer.altdss.altdss_models import Circuit
+from grid_reducer.utils import get_circuit_bus_name, extract_bus_name
 
 
 def dfs_tree_with_attrs(graph: nx.Graph, source):
@@ -47,10 +47,6 @@ def get_normally_open_switches(circuit_obj: Circuit) -> list[str]:
         if switch.SwitchedObj and switch.Normal == SwtControlState.open:
             normally_open_switches.append(switch.SwitchedObj.replace("Line.", ""))
     return normally_open_switches
-
-
-def extract_bus_name(bus_obj: BusConnection) -> str:
-    return bus_obj.root.split(".")[0]
 
 
 def create_bus_voltage_mapper(circuit_obj: Circuit) -> dict[str, float]:
