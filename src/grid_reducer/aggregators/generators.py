@@ -50,7 +50,7 @@ def _aggregate_generators(
     fields: set,
     strategy: GeneratorAggregationStrategy,
 ):
-    new_generator_name = generate_short_name("".join([generator.Name for generator in generators]))
+    new_generator_name = generate_short_name()
     num_phase = get_number_of_phases_from_bus(bus1)
     base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
     agg_val = strategy.compute(generators)
