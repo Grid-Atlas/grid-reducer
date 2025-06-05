@@ -47,7 +47,7 @@ def compare_powerflow_results(original_circuit_file, reduced_circuit_file):
 @pytest.mark.parametrize("file", files)
 def test_primary_aggregation(file, tmp_path):
     reducer = OpenDSSModelReducer(master_dss_file=file)
-    reduced_ckt = reducer.reduce(transform_coordinate=False)
+    reduced_ckt = reducer.reduce(transform_coordinate=True)
     original_circuit_file = tmp_path / "original_ckt.dss"
     reduced_circuit_file = tmp_path / "reduced_ckt.dss"
     reducer.export_original_ckt(original_circuit_file)
