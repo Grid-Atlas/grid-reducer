@@ -1,8 +1,5 @@
 import networkx as nx
-from typing import TypeVar
 import copy
-
-from pint import Quantity
 
 from grid_reducer.altdss.altdss_models import (
     Circuit,
@@ -11,18 +8,22 @@ from grid_reducer.altdss.altdss_models import (
     Line_SpacingWires,
     Line_Z0Z1C0C1,
     Line_ZMatrixCMatrix,
-    Line_Common,
-    Bus,
-    LengthUnit,
+    Reactor_Common,
     Line,
 )
 from grid_reducer.network import get_graph_from_circuit
-from grid_reducer.utils import generate_short_name
 from grid_reducer.aggregate_secondary import _update_circuit_in_place
+from grid_reducer.similarity.line import LineSimilarity
+from grid_reducer.aggregators.line import aggregate_lines
 
 
 LINE_TYPE = (
-    Line_LineCode | Line_LineGeometry | Line_SpacingWires | Line_Z0Z1C0C1 | Line_ZMatrixCMatrix
+    Line_LineCode
+    | Line_LineGeometry
+    | Line_SpacingWires
+    | Line_Z0Z1C0C1
+    | Line_ZMatrixCMatrix
+    | Reactor_Common
 )
 
 
@@ -36,14 +37,20 @@ def _get_list_of_edges_to_preserve(network: nx.Graph, ckt: Circuit) -> list[tupl
     )
     for u, v, edge_data in network.edges(data=True):
         edge = (u, v)
-        if "kva" in edge_data:
+        if edge_data["component_type"] == "Transformer":
             edges_to_preserve.add(edge)
             continue
-        edge_component: LINE_TYPE = edge_data["edge"]
-        if edge_component.Switch:
+        edge_components: list[LINE_TYPE] = edge_data["edge"]
+        if any(
+            edge_component.Switch
+            for edge_component in edge_components
+            if hasattr(edge_component, "Switch")
+        ):
             edges_to_preserve.add(edge)
             continue
-        if edge_data["edge"].Name in capacitor_control_elements:
+        if any(
+            edge_component.Name in capacitor_control_elements for edge_component in edge_components
+        ):
             edges_to_preserve.add(edge)
     return edges_to_preserve
 
@@ -187,70 +194,6 @@ def topologically_sorted_edges(graph: nx.DiGraph) -> list[tuple[str, str]]:
     return sorted(graph.edges(), key=lambda e: position[e[0]])
 
 
-T = TypeVar("T")
-
-
-class CheckSimilarity:
-    ignore_fields = None
-    class_type = None
-
-    def check_if_similar(self, source_edge: T, target_edge: T) -> bool:
-        if self.class_type is None:
-            raise Exception("Class type is not set.")
-        for field in self.class_type.model_fields:
-            if self.ignore_fields is not None and field in self.ignore_fields:
-                continue
-            source_val = getattr(source_edge, field)
-            target_val = getattr(target_edge, field)
-            if source_val != target_val:
-                return False
-        return True
-
-
-class Line_LineCode_Similarity(CheckSimilarity):
-    ignore_fields = {"Name", "Bus1", "Bus2", "Length", "Units"}
-    class_type = Line_LineCode
-
-
-def _find_start_end_buses_set_based(lines: list[Line_Common]) -> tuple[Bus, Bus]:
-    assert len(lines) >= 2
-    bus_counts = {}
-
-    for line in lines:
-        for bus in (line.Bus1, line.Bus2):
-            bus_counts[bus.root] = bus_counts.get(bus.root, 0) + 1
-
-    # Start bus: from first line, whichever bus appears only once
-    first_line_buses = [lines[0].Bus1, lines[0].Bus2]
-    last_line_buses = [lines[-1].Bus1, lines[-1].Bus2]
-
-    start_bus = next(bus for bus in first_line_buses if bus_counts[bus.root] == 1)
-    end_bus = next(bus for bus in last_line_buses if bus_counts[bus.root] == 1)
-
-    return start_bus, end_bus
-
-
-def aggregate_line_linecode(lines: list[Line_LineCode]) -> Line_LineCode:
-    assert len(lines) >= 2
-    common_fields = Line_LineCode.model_fields.keys() - Line_LineCode_Similarity.ignore_fields
-
-    common_values_dict = {}
-    for field in common_fields:
-        common_values_dict[field] = getattr(lines[0], field)
-
-    new_line_name = generate_short_name("".join([line.Name for line in lines]))
-    bus1, bus2 = _find_start_end_buses_set_based(lines)
-    total_length = sum([Quantity(line.Length, line.Units.value) for line in lines]).to("m")
-    return Line_LineCode(
-        Name=new_line_name,
-        Bus1=bus1,
-        Bus2=bus2,
-        Length=total_length.magnitude,
-        Units=LengthUnit.m,
-        **common_values_dict,
-    )
-
-
 def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
     """
     This function intends to aggregate similar primary branches
@@ -260,42 +203,45 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
     edges_to_preserve = _get_list_of_edges_to_preserve(dgraph, circuit)
     nodes_to_preserve = _get_list_of_nodes_to_preserve(circuit)
     linear_trees = _get_linear_trees_from_graph(dgraph, edges_to_preserve)
-    linear_trees_with_more_than_one_edge = [tree for tree in linear_trees if len(tree.edges) > 1]
-    graph_with_more_than_one_edge: list[nx.DiGraph] = []
-    for linear_tree in linear_trees_with_more_than_one_edge:
-        preserved_nodes = set(linear_tree.nodes).intersection(nodes_to_preserve)
-        if preserved_nodes:
-            segments = extract_segments_from_linear_tree(linear_tree, preserved_nodes)
-        else:
-            segments = [linear_tree]
-        graph_with_more_than_one_edge.extend(seg for seg in segments if len(seg.edges) > 1)
+    multi_edge_trees = [tree for tree in linear_trees if len(tree.edges) > 1]
+    aggregatable_segments: list[nx.DiGraph] = []
+    for tree in multi_edge_trees:
+        preserved_nodes = set(tree.nodes) & nodes_to_preserve
+        segments = (
+            extract_segments_from_linear_tree(tree, preserved_nodes) if preserved_nodes else [tree]
+        )
+        aggregatable_segments.extend(seg for seg in segments if len(seg.edges) > 1)
 
     lines_aggregated, lines_to_remove = [], []
-    for graph in graph_with_more_than_one_edge:
+    similarity_checker = LineSimilarity()
+
+    for graph in aggregatable_segments:
         assert is_linear_tree(graph)
         sorted_edges = topologically_sorted_edges(graph)
-        similar_edges = [graph.get_edge_data(*sorted_edges[0])["edge"]]
-        current_edge_type = type(similar_edges[0])
-        for edge in sorted_edges[1:]:
-            edge_comp = graph.get_edge_data(*edge)["edge"]
-            similarity_check_class = globals()[f"{current_edge_type.__name__}_Similarity"]()
-            if isinstance(
-                edge_comp, current_edge_type
-            ) and similarity_check_class.check_if_similar(similar_edges[-1], edge_comp):
+        similar_edges, current_edge_type = [], None
+        for edge in sorted_edges:
+            edge_comps = graph.get_edge_data(*edge)["edge"]
+            if len(edge_comps) > 1:
+                continue
+            edge_comp = edge_comps[0]
+            if not similar_edges:
+                similar_edges = [edge_comp]
+                current_edge_type = type(edge_comp)
+                continue
+            similarity_checker = LineSimilarity()
+            if isinstance(edge_comp, current_edge_type) and similarity_checker.check_if_similar(
+                similar_edges[-1], edge_comp
+            ):
                 similar_edges.append(edge_comp)
                 continue
             if len(similar_edges) > 1:
-                aggregate_func = globals()[f"aggregate_{current_edge_type.__name__.lower()}"]
-                aggregated_line = aggregate_func(similar_edges)
-                lines_aggregated.append(aggregated_line)
+                lines_aggregated.append(aggregate_lines(similar_edges))
                 lines_to_remove.extend(similar_edges)
             similar_edges = [edge_comp]
             current_edge_type = type(edge_comp)
 
         if len(similar_edges) > 1:
-            aggregate_func = globals()[f"aggregate_{current_edge_type.__name__.lower()}"]
-            aggregated_line = aggregate_func(similar_edges)
-            lines_aggregated.append(aggregated_line)
+            lines_aggregated.append(aggregate_lines(similar_edges))
             lines_to_remove.extend(similar_edges)
 
     all_lines = [line.root for line in circuit.Line.root.root]
@@ -315,7 +261,11 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
 def _get_buses_to_keep(circuit: Circuit) -> set:
     buses_to_keep = set()
     lines = [line.root for line in circuit.Line.root.root]
-    transformers = [transformer.root for transformer in circuit.Transformer.root.root]
+    transformers = (
+        [transformer.root for transformer in circuit.Transformer.root.root]
+        if circuit.Transformer
+        else []
+    )
     for line in lines:
         for bus in [line.Bus1, line.Bus2]:
             buses_to_keep.add(bus.root.split(".")[0])

@@ -1,6 +1,5 @@
 from typing import TypeVar
 from typing import Any, Type
-import math
 from collections import defaultdict
 import copy
 
@@ -10,8 +9,6 @@ from pydantic import BaseModel
 from grid_reducer.altdss.altdss_models import (
     Circuit,
     Load,
-    Load_kWkvar,
-    BusConnection,
     Transformer_Common,
     Line_Common,
     PVSystem,
@@ -24,71 +21,22 @@ from grid_reducer.altdss.altdss_models import (
     SwtControl,
 )
 from grid_reducer.network import get_graph_from_circuit, get_normally_open_switches
-from grid_reducer.utils import get_bus_connected_assets, generate_short_name
+from grid_reducer.utils import get_bus_connected_assets
+from grid_reducer.aggregators.registry import AGGREGATION_FUNC_REGISTRY
 
 T = TypeVar("T")
-
-
-def get_number_of_phases_from_bus(bus: str) -> int:
-    if "." not in bus:
-        return 3
-    bus_splits = bus.split(".")[1:]
-    if "0" in bus_splits:
-        bus_splits.remove("0")
-    return len(bus_splits)
-
-
-def get_extra_param_values(
-    class_type: BaseModel, objects: list[BaseModel], params_to_aggregate: set[str]
-) -> dict[str, Any]:
-    other_params = class_type.model_fields.keys() - params_to_aggregate
-    other_params_val_mapper = {}
-    for key in other_params:
-        first_val = getattr(objects[0], key)
-        values = set(
-            [
-                tuple(getattr(obj, key)) if isinstance(first_val, list) else getattr(obj, key)
-                for obj in objects
-            ]
-        )
-        if len(values) > 1:
-            raise NotImplementedError(
-                f"Aggregating {class_type=} with different {values=} for {key=} is not supported yet."
-            )
-        other_params_val_mapper[key] = first_val
-    return other_params_val_mapper
-
-
-def aggregate_load_kwkvar(loads: list[Load_kWkvar], bus1: str, kv: float) -> Load_kWkvar:
-    new_load_name = generate_short_name("".join([load.Name for load in loads]))
-    params_to_aggregate = {"Name", "Bus1", "Phases", "kV", "kW", "kvar"}
-    num_phase = get_number_of_phases_from_bus(bus1)
-    assert num_phase >= max([load.Phases for load in loads])
-    return Load_kWkvar(
-        Name=new_load_name,
-        Bus1=BusConnection(root=bus1),
-        Phases=get_number_of_phases_from_bus(bus1),
-        kV=kv if num_phase == 1 else round(kv * math.sqrt(3), 3),
-        kW=sum([load.kW for load in loads]),
-        kvar=sum([load.kvar for load in loads]),
-        **get_extra_param_values(Load_kWkvar, loads, params_to_aggregate),
-    )
 
 
 def aggregate_generic_objects(objects: list[T], bus1: str, kv: float) -> list[Any]:
     agg_objects = []
     class_types = set([type(obj) for obj in objects])
     for class_type in class_types:
-        func_name = f"aggregate_{class_type.__name__.lower()}"
-        if func_name in globals():
-            aggregate_func = globals()[func_name]
-            agg_objects.append(
-                aggregate_func(
-                    [obj for obj in objects if isinstance(obj, class_type)], bus1=bus1, kv=kv
-                )
-            )
-        else:
-            raise KeyError(f"Function '{func_name}' not found in globals.")
+        if class_type not in AGGREGATION_FUNC_REGISTRY:
+            raise KeyError(f"No aggregator function registered for {class_type.__name__}")
+        aggregate_func = AGGREGATION_FUNC_REGISTRY[class_type]
+        filtered_objects = [obj for obj in objects if isinstance(obj, class_type)]
+        result = aggregate_func(filtered_objects, bus1=bus1, kv=kv)
+        agg_objects.extend(result if isinstance(result, list) else [result])
     return agg_objects
 
 
@@ -159,10 +107,13 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
             _update_circuit_in_place(new_circuit, assets, asset_type)
 
     assets_to_keep_mapper = {
-        Line: [data["edge"] for _, _, data in agg_graph.edges(data=True) if "kva" not in data],
-        Transformer: [
-            tr for _, _, data in agg_graph.edges(data=True) if "kva" in data for tr in data["edge"]
-        ],
+        cls: [
+            comp
+            for _, _, data in agg_graph.edges(data=True)
+            if data["component_type"] == cls.__name__
+            for comp in data["edge"]
+        ]
+        for cls in [Line, Reactor, Transformer]
     }
     no_switches = get_normally_open_switches(circuit)
     for line in circuit.Line.root.root:
@@ -177,6 +128,9 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
             if swt.SwitchedObj.replace("Line.", "") in lines_preserved
         ]
     for asset_type, assets in assets_to_keep_mapper.items():
+        if not assets:
+            setattr(new_circuit, asset_type.__name__, None)
+            continue
         _update_circuit_in_place(new_circuit, assets, asset_type)
 
     new_circuit.Bus = [bus for bus in new_circuit.Bus if bus.Name in nodes_to_keep]

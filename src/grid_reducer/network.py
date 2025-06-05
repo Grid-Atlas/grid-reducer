@@ -1,9 +1,11 @@
+from typing import Any
+
 import networkx as nx
 import matplotlib.pyplot as plt
 
 from grid_reducer.altdss.altdss_models import SwtControlState
 
-from grid_reducer.altdss.altdss_models import Circuit
+from grid_reducer.altdss.altdss_models import Circuit, BusConnection
 from grid_reducer.utils import get_circuit_bus_name
 
 
@@ -36,6 +38,9 @@ def dfs_tree_with_attrs(graph: nx.Graph, source):
 
 def get_normally_open_switches(circuit_obj: Circuit) -> list[str]:
     normally_open_switches = []
+    for line in circuit_obj.Line.root.root:
+        if line.root.Enabled is False:
+            normally_open_switches.append(line.root.Name)
     if circuit_obj.SwtControl is None:
         return normally_open_switches
     for switch in circuit_obj.SwtControl.root.root:
@@ -44,60 +49,148 @@ def get_normally_open_switches(circuit_obj: Circuit) -> list[str]:
     return normally_open_switches
 
 
-def get_graph_from_circuit(circuit_obj: Circuit, directed: bool = False) -> nx.Graph:
+def extract_bus_name(bus_obj: BusConnection) -> str:
+    return bus_obj.root.split(".")[0]
+
+
+def create_bus_voltage_mapper(circuit_obj: Circuit) -> dict[str, float]:
+    """Create a mapping of bus names to their voltages."""
     bus_voltage_mapper = {}
-    no_switches = get_normally_open_switches(circuit_obj)
-    graph = nx.Graph()
+    for bus in circuit_obj.Bus:
+        bus_voltage_mapper[bus.Name] = bus.kVLN
+    return bus_voltage_mapper
+
+
+def add_bus_nodes(graph: nx.Graph, circuit_obj):
+    """Add bus nodes to the graph with their properties."""
     for bus in circuit_obj.Bus:
         graph.add_node(
             bus.Name,
             pos=(bus.X, bus.Y),
             kv=bus.kVLN,
         )
-        bus_voltage_mapper[bus.Name] = bus.kVLN
-    for line in circuit_obj.Line.root.root:
-        bus1 = line.root.Bus1.root.split(".")[0]
-        bus2 = line.root.Bus2.root.split(".")[0]
-        if line.root.Name in no_switches:
-            continue
+
+
+def get_component_buses(component: Any) -> tuple[str, str]:
+    """Extract bus names from a component."""
+    bus1 = extract_bus_name(component.root.Bus1)
+    bus2 = extract_bus_name(component.root.Bus2) if component.root.Bus2 is not None else None
+    return bus1, bus2
+
+
+def add_component_edge(
+    graph: nx.Graph,
+    bus1: str,
+    bus2: str,
+    component: Any,
+    component_type: str,
+    bus_voltage_mapper: dict[str, float],
+):
+    """Add or update an edge for a component between two buses."""
+    edge_components = [component.root]
+    if graph.has_edge(bus1, bus2):
+        edge_data = graph.get_edge_data(bus1, bus2)
+        edge_components += edge_data.get("edge", [])
+        graph[bus1][bus2].update(
+            {"edge": edge_components, "name": ",".join([t.Name for t in edge_components])}
+        )
+    else:
         graph.add_edge(
             bus1,
             bus2,
             kv=bus_voltage_mapper[bus1],
-            phases=line.root.Phases,
-            ampacity=line.root.NormAmps,
-            edge=line.root,
-            name=line.root.Name,
+            edge=edge_components,
+            component_type=component_type,
+            name=",".join([t.Name for t in edge_components]),
         )
+
+
+def add_line_and_reactor_components(
+    graph: nx.Graph,
+    circuit_obj: Circuit,
+    no_switches: list[str],
+    bus_voltage_mapper: dict[str, float],
+):
+    """Add line and reactor components as edges to the graph."""
+    components_dict = {
+        "Line": circuit_obj.Line,
+        "Reactor": circuit_obj.Reactor,
+    }
+
+    for component_type, components in components_dict.items():
+        if not components:
+            continue
+        for component in components.root.root:
+            name = component.root.Name
+            if name in no_switches:
+                continue
+
+            bus1, bus2 = get_component_buses(component)
+            if not bus2:
+                continue
+            add_component_edge(graph, bus1, bus2, component, component_type, bus_voltage_mapper)
+
+
+def validate_transformer_edge_components(edge_components: list, buses: list[str]):
+    """Validate transformer edge components have consistent parameters."""
+    phases_set = {t.Phases for t in edge_components}
+    name_list = [t.Name for t in edge_components]
+
+    if len(phases_set) != 1:
+        bus1, bus2 = tuple(buses)
+        msg = f"""Inconsistent transformer parameters on edge ({bus1}, {bus2}),
+        skipping. {phases_set=}, {name_list=}"""
+        raise Exception(msg)
+
+    return name_list
+
+
+def add_transformer_edge(
+    graph: nx.Graph, buses: list[str], transformer: Any, bus_voltage_mapper: dict[str, float]
+):
+    """Add a transformer edge between two buses."""
+    bus_voltages = [bus_voltage_mapper[bus] for bus in buses]
+    edge_components = [transformer.root]
+
+    if graph.has_edge(*buses):
+        edge_data = graph.get_edge_data(*buses)
+        edge_components += edge_data.get("edge", [])
+
+    name_list = validate_transformer_edge_components(edge_components, buses)
+    kva_list = [min(t.kVA) if t.kVA else None for t in edge_components]
+
+    graph.add_edge(
+        *buses,
+        high_kv=max(bus_voltages),
+        low_kv=min(bus_voltages),
+        kva=kva_list,
+        edge=edge_components,
+        component_type="Transformer",
+        name=",".join(name_list),
+    )
+
+
+def add_transformer_components(
+    graph: nx.Graph, circuit_obj: Circuit, bus_voltage_mapper: dict[str, float]
+):
+    """Add transformer components as edges to the graph."""
+    if circuit_obj.Transformer is None:
+        return
     for transformer in circuit_obj.Transformer.root.root:
         buses = set([el.root.split(".")[0] for el in transformer.root.Bus])
         if len(buses) == 2:
-            bus_voltages = [bus_voltage_mapper[bus] for bus in buses]
-            edge_components = [transformer.root]
-            if graph.has_edge(*buses):
-                edge_data = graph.get_edge_data(*buses)
-                edge_components += edge_data.get("edge", [])
-
-            phases_set = {t.Phases for t in edge_components}
-            kva_list = [min(t.kVA) for t in edge_components]
-            name_list = [t.Name for t in edge_components]
-            if len(phases_set) == 1:
-                graph.add_edge(
-                    *buses,
-                    high_kv=max(bus_voltages),
-                    low_kv=min(bus_voltages),
-                    phases=phases_set.pop(),
-                    kva=kva_list,
-                    edge=edge_components,
-                    name=",".join(name_list),
-                )
-            else:
-                msg = f"""Inconsistent transformer parameters on edge ({bus1}, {bus2}),
-                skipping. {phases_set=}, {name_list=}"""
-                raise Exception(msg)
+            add_transformer_edge(graph, buses, transformer, bus_voltage_mapper)
         else:
             raise Exception("Transformer with more than 2 buses not supported.")
 
+
+def get_graph_from_circuit(circuit_obj: Circuit, directed: bool = False) -> nx.Graph:
+    bus_voltage_mapper = create_bus_voltage_mapper(circuit_obj)
+    no_switches = get_normally_open_switches(circuit_obj)
+    graph = nx.Graph()
+    add_bus_nodes(graph, circuit_obj)
+    add_line_and_reactor_components(graph, circuit_obj, no_switches, bus_voltage_mapper)
+    add_transformer_components(graph, circuit_obj, bus_voltage_mapper)
     return (
         graph
         if not directed

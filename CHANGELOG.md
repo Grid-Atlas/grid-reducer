@@ -29,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.0.0-draft] - 2025-06-02
+## [1.0.0-draft] - 2025-06-04
 
 ### Added
 - Migrated code from gitlab to github.
+- Added support for IEEE9500 node test case.

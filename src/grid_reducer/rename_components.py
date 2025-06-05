@@ -10,6 +10,7 @@ from grid_reducer.altdss.altdss_models import (
     Line_LineGeometry,
     Line_LineCode,
     Transformer_XfmrCode,
+    LineGeometry_LineSpacing,
 )
 
 
@@ -45,7 +46,7 @@ def rename_point_assets(
         else:
             mapped = value
         setattr(item, attr, mapped)
-        new_name = get_unique_name(field.lower(), [mapped], asset_mapping[field])
+        new_name = get_unique_name(field.lower(), [mapped.split(".")[-1]], asset_mapping[field])
         asset_mapping[field][item.Name] = new_name
         item.Name = new_name
         updated_items.append(item)
@@ -120,8 +121,8 @@ def _update_independent_components(circuit: Circuit, new_circuit: Circuit) -> di
         "WireData",
         "CNData",
         "TSData",
-        "LineSpacing",
         "LineGeometry",
+        "LineSpacing",
         "XfmrCode",
     }
     for field in Circuit.model_fields:
@@ -138,21 +139,49 @@ def _rename_lines(new_circuit, bus_mapping, ic_mappings):
         root.Bus1 = format_bus(root.Bus1, bus_mapping)
         root.Bus2 = format_bus(root.Bus2, bus_mapping)
         prefix = "switch" if root.Switch else "line"
-        new_name = get_unique_name(
-            prefix, [b.root.split(".")[0] for b in [root.Bus1, root.Bus2]], mappings
-        )
+        new_name = get_unique_name(prefix, [], mappings)
         mappings[root.Name] = new_name
         root.Name = new_name
 
         if isinstance(root, Line_LineCode):
             root.LineCode = ic_mappings["LineCode"][root.LineCode]
-        elif isinstance(root, (Line_LineGeometry, Line_SpacingWires)):
-            raise NotImplementedError("Geometry and spacing wires not supported yet for renaming.")
+        elif isinstance(root, Line_LineGeometry):
+            root.Geometry = ic_mappings["LineGeometry"][root.Geometry]
+        elif isinstance(root, Line_SpacingWires):
+            root.Spacing = ic_mappings["LineSpacing"][root.Spacing]
 
         renamed.append(line)
 
     new_circuit.Line.root.root = renamed
     return mappings
+
+
+def _update_line_geometry_fields(new_circuit: Circuit, ic_mappings):
+    if not new_circuit.LineGeometry:
+        return
+    renamed = []
+    cond_data_mappings = {**ic_mappings["WireData"], **ic_mappings["CNData"]}
+    for geometry in new_circuit.LineGeometry.root.root:
+        root = geometry.root
+        conductors = [
+            f"{c.split('.')[0]}.{cond_data_mappings[c.split('.')[1]]}" if isinstance(c, str) else c
+            for c in root.Conductors
+        ]
+        root.Conductors = conductors
+        if isinstance(root, LineGeometry_LineSpacing):
+            root.Spacing = ic_mappings["LineSpacing"][root.Spacing]
+        renamed.append(geometry)
+    new_circuit.LineGeometry.root.root = renamed
+
+
+def _update_capacitor_control_fields(new_circuit: Circuit, ic_mappings):
+    if not new_circuit.CapControl:
+        return
+    renamed = []
+    for capacitor in new_circuit.CapControl.root.root:
+        capacitor.Capacitor = ic_mappings["Capacitor"][capacitor.Capacitor]
+        renamed.append(capacitor)
+    new_circuit.CapControl.root.root = renamed
 
 
 def _rename_transformers(new_circuit, bus_mapping, ic_mappings):
@@ -207,17 +236,21 @@ def _rename_other_assets(
             setattr(circuit, field, updated)
 
 
-def _update_postcommands(new_circuit, commands, line_mappings):
-    if not commands:
+def _update_postcommands(new_circuit: Circuit, mappings, prefix):
+    if not new_circuit.PostCommands:
         return
     updated = []
-    for command in commands:
-        match = re.search(r"line\.([^\s]+)", command, re.IGNORECASE)
+    for command in new_circuit.PostCommands:
+        pattern = rf"{re.escape(prefix)}\.([^\s\.]+)"
+        match = re.search(pattern, command, re.IGNORECASE)
         if match:
             old_name = match.group(1)
-            new_name = line_mappings.get(old_name, old_name)
+            new_name = mappings.get(old_name, old_name)
             command = re.sub(
-                rf"(line\.{re.escape(old_name)})", f"line.{new_name}", command, flags=re.IGNORECASE
+                rf"({re.escape(prefix)}\.{re.escape(old_name)})",
+                f"{prefix}.{new_name}",
+                command,
+                flags=re.IGNORECASE,
             )
         updated.append(command)
     new_circuit.PostCommands = updated
@@ -231,10 +264,21 @@ def rename_assets(circuit: Circuit) -> Circuit:
     new_circuit.Bus = _rename_buses(circuit.Bus, bus_mapping)
 
     independent_component_mappings = _update_independent_components(circuit, new_circuit)
+    _update_line_geometry_fields(new_circuit, independent_component_mappings)
     line_mappings = _rename_lines(new_circuit, bus_mapping, independent_component_mappings)
-    transformer_mappings = _rename_transformers(
-        new_circuit, bus_mapping, independent_component_mappings
+    transformer_mappings = {}
+    if circuit.Transformer:
+        transformer_mappings = _rename_transformers(
+            new_circuit, bus_mapping, independent_component_mappings
+        )
+    _rename_other_assets(
+        new_circuit,
+        bus_mapping,
+        transformer_mappings,
+        line_mappings,
+        independent_component_mappings,
     )
-    _rename_other_assets(new_circuit, bus_mapping, transformer_mappings, line_mappings)
-    _update_postcommands(new_circuit, circuit.PostCommands, line_mappings)
+    _update_capacitor_control_fields(new_circuit, independent_component_mappings)
+    _update_postcommands(new_circuit, line_mappings, "line")
+    _update_postcommands(new_circuit, independent_component_mappings["Capacitor"], "capacitor")
     return new_circuit
