@@ -13,6 +13,7 @@ from grid_reducer.utils import (
     get_extra_param_values,
     sum_or_none,
     weighted_average_or_none,
+    group_objects_excluding_fields,
 )
 from grid_reducer.aggregators.registry import register_aggregator
 
@@ -53,29 +54,35 @@ def _aggregate_pvs(
     field: str,
     fields: set,
     strategy: PVAggregationStrategy,
-):
-    new_pv_name = generate_short_name()
-    num_phase = get_number_of_phases_from_bus(bus1)
-    base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
-    agg_val = strategy.compute(pvs)
+) -> list[PVSystem_Common]:
+    value_mapper = group_objects_excluding_fields(pvs, fields)
+    new_pvs = []
+    for _, pv_list in value_mapper.items():
+        new_pv_name = generate_short_name()
+        num_phase = get_number_of_phases_from_bus(bus1)
+        base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
+        agg_val = strategy.compute(pv_list)
 
-    return pv_cls(
-        Name=new_pv_name,
-        Bus1=BusConnection(root=bus1),
-        Phases=num_phase,
-        Pmpp=sum_or_none([pv.Pmpp for pv in pvs]),
-        kVA=sum_or_none([pv.kVA for pv in pvs]),
-        Irradiance=weighted_average_or_none(
-            [pv.Irradiance for pv in pvs], [pv.Pmpp for pv in pvs]
-        ),
-        kV=base_kv,
-        **{field: agg_val},
-        **get_extra_param_values(pv_cls, pvs, fields),
-    )
+        new_pvs.append(
+            pv_cls(
+                Name=new_pv_name,
+                Bus1=BusConnection(root=bus1),
+                Phases=num_phase,
+                Pmpp=sum_or_none([pv.Pmpp for pv in pvs]),
+                kVA=sum_or_none([pv.kVA for pv in pvs]),
+                Irradiance=weighted_average_or_none(
+                    [pv.Irradiance for pv in pvs], [pv.Pmpp for pv in pvs]
+                ),
+                kV=base_kv,
+                **{field: agg_val},
+                **get_extra_param_values(pv_cls, pvs, fields),
+            )
+        )
+    return new_pvs
 
 
 @register_aggregator(PVSystem_PF)
-def aggregate_pv_pf(pvs: list[PVSystem_PF], bus1: str, kv: float) -> PVSystem_PF:
+def aggregate_pv_pf(pvs: list[PVSystem_PF], bus1: str, kv: float) -> list[PVSystem_PF]:
     return _aggregate_pvs(
         pvs,
         bus1,
@@ -88,7 +95,7 @@ def aggregate_pv_pf(pvs: list[PVSystem_PF], bus1: str, kv: float) -> PVSystem_PF
 
 
 @register_aggregator(PVSystem_kvar)
-def aggregate_pv_kvar(loads: list[PVSystem_kvar], bus1: str, kv: float) -> PVSystem_kvar:
+def aggregate_pv_kvar(loads: list[PVSystem_kvar], bus1: str, kv: float) -> list[PVSystem_kvar]:
     return _aggregate_pvs(
         loads,
         bus1,

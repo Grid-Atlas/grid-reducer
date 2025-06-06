@@ -12,6 +12,7 @@ from grid_reducer.utils import (
     get_number_of_phases_from_bus,
     get_extra_param_values,
     sum_or_none,
+    group_objects_excluding_fields,
 )
 from grid_reducer.aggregators.registry import register_aggregator
 
@@ -49,28 +50,34 @@ def _aggregate_generators(
     field: str,
     fields: set,
     strategy: GeneratorAggregationStrategy,
-):
-    new_generator_name = generate_short_name()
-    num_phase = get_number_of_phases_from_bus(bus1)
-    base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
-    agg_val = strategy.compute(generators)
+) -> list[Generator_Common]:
+    value_mapper = group_objects_excluding_fields(generators, fields)
+    new_generators = []
+    for _, generator_list in value_mapper.items():
+        new_generator_name = generate_short_name()
+        num_phase = get_number_of_phases_from_bus(bus1)
+        base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
+        agg_val = strategy.compute(generator_list)
 
-    return generator_cls(
-        Name=new_generator_name,
-        Bus1=BusConnection(root=bus1),
-        Phases=num_phase,
-        kVA=sum_or_none([generator.kVA for generator in generators]),
-        kW=sum_or_none([generator.kW for generator in generators]),
-        kV=base_kv,
-        **{field: agg_val},
-        **get_extra_param_values(generator_cls, generators, fields),
-    )
+        new_generators.append(
+            generator_cls(
+                Name=new_generator_name,
+                Bus1=BusConnection(root=bus1),
+                Phases=num_phase,
+                kVA=sum_or_none([generator.kVA for generator in generator_list]),
+                kW=sum_or_none([generator.kW for generator in generator_list]),
+                kV=base_kv,
+                **{field: agg_val},
+                **get_extra_param_values(generator_cls, generator_list, fields),
+            )
+        )
+    return new_generators
 
 
 @register_aggregator(Generator_kWpf)
 def aggregate_generator_pf(
     generators: list[Generator_kWpf], bus1: str, kv: float
-) -> Generator_kWpf:
+) -> list[Generator_kWpf]:
     return _aggregate_generators(
         generators,
         bus1,
@@ -85,7 +92,7 @@ def aggregate_generator_pf(
 @register_aggregator(Generator_kWkvar)
 def aggregate_storage_kvar(
     generators: list[Generator_kWkvar], bus1: str, kv: float
-) -> Generator_kWkvar:
+) -> list[Generator_kWkvar]:
     return _aggregate_generators(
         generators,
         bus1,

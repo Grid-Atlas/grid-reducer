@@ -1,14 +1,13 @@
 from abc import ABC, abstractmethod
 import math
 from typing import Type
-from collections import defaultdict
 
 from grid_reducer.altdss.altdss_models import Load_kWkvar, Load_kVAPF, Load_kWPF, BusConnection
 from grid_reducer.utils import (
     get_number_of_phases_from_bus,
-    get_tuple_of_values_from_object,
     get_extra_param_values,
     generate_short_name,
+    group_objects_excluding_fields,
 )
 from grid_reducer.aggregators.registry import register_aggregator
 
@@ -62,12 +61,8 @@ def _aggregate_loads(
     load_cls: Type,
     fields: set,
     strategy: LoadAggregationStrategy,
-):
-    value_mapper = defaultdict(list)
-    for load in loads:
-        key = get_tuple_of_values_from_object(load, fields)
-        value_mapper[repr(key)].append(load)
-
+) -> list:
+    value_mapper = group_objects_excluding_fields(loads, fields)
     new_loads = []
     for _, load_list in value_mapper.items():
         new_load_name = generate_short_name()

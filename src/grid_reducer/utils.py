@@ -1,12 +1,15 @@
 from pathlib import Path
 import json
-from typing import Any, Type
+from typing import Any, Type, TypeVar
+from collections import defaultdict
 
 import opendssdirect as odd
 from uuid import uuid4
 from pydantic import BaseModel
 
 from grid_reducer.altdss.altdss_models import Circuit, BusConnection
+
+T = TypeVar("T", bound=BaseModel)
 
 
 def get_dict_from_opendss(master_file: Path) -> dict:
@@ -119,3 +122,13 @@ def weighted_average_or_none(values, weights):
 
 def extract_bus_name(bus_obj: BusConnection) -> str:
     return bus_obj.root.split(".")[0]
+
+
+def group_objects_excluding_fields(objects: list[T], fields: set) -> dict[str, list[T]]:
+    """Group objects by the specified fields."""
+    value_mapper = defaultdict(list)
+    obj_type = type(objects[0])
+    for obj in objects:
+        key = get_tuple_of_values_from_object(obj, obj_type.model_fields.keys() - fields)
+        value_mapper[repr(key)].append(obj)
+    return value_mapper

@@ -12,6 +12,7 @@ from grid_reducer.utils import (
     get_number_of_phases_from_bus,
     get_extra_param_values,
     sum_or_none,
+    group_objects_excluding_fields,
 )
 from grid_reducer.aggregators.registry import register_aggregator
 
@@ -49,28 +50,34 @@ def _aggregate_storages(
     field: str,
     fields: set,
     strategy: StorageAggregationStrategy,
-):
-    new_storage_name = generate_short_name()
-    num_phase = get_number_of_phases_from_bus(bus1)
-    base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
-    agg_val = strategy.compute(storages)
+) -> list[Storage_Common]:
+    value_mapper = group_objects_excluding_fields(storages, fields)
+    new_storages = []
+    for _, storage_list in value_mapper.items():
+        new_storage_name = generate_short_name()
+        num_phase = get_number_of_phases_from_bus(bus1)
+        base_kv = kv if num_phase == 1 else round(kv * math.sqrt(3), 3)
+        agg_val = strategy.compute(storage_list)
 
-    return storage_cls(
-        Name=new_storage_name,
-        Bus1=BusConnection(root=bus1),
-        Phases=num_phase,
-        kVA=sum_or_none([storage.kVA for storage in storages]),
-        kWRated=sum_or_none([storage.kWRated for storage in storages]),
-        kV=base_kv,
-        **{field: agg_val},
-        **get_extra_param_values(storage_cls, storages, fields),
-    )
+        new_storages.append(
+            storage_cls(
+                Name=new_storage_name,
+                Bus1=BusConnection(root=bus1),
+                Phases=num_phase,
+                kVA=sum_or_none([storage.kVA for storage in storage_list]),
+                kWRated=sum_or_none([storage.kWRated for storage in storage_list]),
+                kV=base_kv,
+                **{field: agg_val},
+                **get_extra_param_values(storage_cls, storage_list, fields),
+            )
+        )
+    return new_storages
 
 
 @register_aggregator(Storage_kWRatedPF)
 def aggregate_storage_pf(
     storages: list[Storage_kWRatedPF], bus1: str, kv: float
-) -> Storage_kWRatedPF:
+) -> list[Storage_kWRatedPF]:
     return _aggregate_storages(
         storages,
         bus1,
@@ -85,7 +92,7 @@ def aggregate_storage_pf(
 @register_aggregator(Storage_kWRatedkvar)
 def aggregate_storage_kvar(
     storages: list[Storage_kWRatedkvar], bus1: str, kv: float
-) -> Storage_kWRatedkvar:
+) -> list[Storage_kWRatedkvar]:
     return _aggregate_storages(
         storages,
         bus1,
