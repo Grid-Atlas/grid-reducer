@@ -84,10 +84,15 @@ graph = get_networkx_graph_from_opendss_model("tests/smartds/Master.dss")
 
 ## Plotting the network
 
+For simple graphs with no geo-graphic coordinates use this.
+
 ```python
 from grid_reducer.network import plot_networkx
 plot_networkx(graph)
 ```
+
+However, if you want to plot graph with map layer we suggest using geo-pandas.
+Please follow this [examples/explore_grapph.ipynb](./examples/explore_graph.ipynb) to learn more. 
 
 ## Attribution and Disclaimer
 

@@ -1,7 +1,6 @@
 from typing import Any
 
 import networkx as nx
-import matplotlib.pyplot as plt
 
 from grid_reducer.altdss.altdss_models import SwtControlState
 
@@ -192,24 +191,3 @@ def get_graph_from_circuit(circuit_obj: Circuit, directed: bool = False) -> nx.G
         if not directed
         else dfs_tree_with_attrs(graph, source=get_circuit_bus_name(circuit_obj))
     )
-
-
-def plot_graph(
-    graph: nx.Graph,
-    show_node_labels: bool = False,
-    show_edge_labels: bool = False,
-    nodes_of_interest=None,
-    node_size=50,
-):
-    pos = nx.get_node_attributes(graph, "pos")
-    if nodes_of_interest is None:
-        nodes_of_interest = []
-
-    # Assign color: red for nodes of interest, blue otherwise
-    node_colors = ["red" if node in nodes_of_interest else "blue" for node in graph.nodes]
-
-    nx.draw(graph, pos, with_labels=show_node_labels, node_color=node_colors, node_size=node_size)
-    if show_edge_labels:
-        edge_labels = nx.get_edge_attributes(graph, "name")
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=6)
-    plt.show()
