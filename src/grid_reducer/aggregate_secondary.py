@@ -36,7 +36,7 @@ def aggregate_generic_objects(objects: list[T], bus1: str, kv: float) -> list[An
         aggregate_func = AGGREGATION_FUNC_REGISTRY[class_type]
         filtered_objects = [obj for obj in objects if isinstance(obj, class_type)]
         result = aggregate_func(filtered_objects, bus1=bus1, kv=kv)
-        agg_objects.extend(result if isinstance(result, list) else [result])
+        agg_objects.extend(result)
     return agg_objects
 
 

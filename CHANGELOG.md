@@ -29,8 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.0.0-draft] - 2025-06-04
+## [1.0.0-draft] - 2025-06-06
 
 ### Added
 - Migrated code from gitlab to github.
 - Added support for IEEE9500 node test case.
+- Added function to translate graph to geo_dataframe.
+- Added feature to group assets with same non-ignored fields before aggregation.
