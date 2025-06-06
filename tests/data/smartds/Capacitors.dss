@@ -1,0 +1,4 @@
+New Capacitor.p12uc2 bus1=p12udt1248 phases=3 Kv=12.47 conn=Wye Kvar=300.0
+
+New CapControl.p12uc2 Capacitor=p12uc2 Element=Line.l(r:p12udt1248-p12udt5986)_s1 Terminal=1 delay=100.0 Type=voltage Vmin=120.5 Vmax=125.0 Ptratio=59.99631547328862 Ctratio=100.0
+

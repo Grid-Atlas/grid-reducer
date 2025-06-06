@@ -11,7 +11,7 @@ from grid_reducer.opendss import OpenDSS
 from grid_reducer.reducer import OpenDSSModelReducer
 
 root_folder = Path(__file__).parent / "data"
-additional_data_folder = Path(__file__).parent / "../data"
+additional_data_folder = Path(__file__).parent / "../extra_data"
 test_folders = [root_folder, additional_data_folder]
 files = []
 for folder in test_folders:
