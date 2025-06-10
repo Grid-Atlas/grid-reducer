@@ -1,6 +1,6 @@
 # Grid Reducer
 
-A private repository for performing network reduction in distribution system power flow model.
+A private repository for performing network reduction in distribution system power flow model. Read more abour the appraoch [here](./docs/approach.md).
 
 ## Getting Started 
 
