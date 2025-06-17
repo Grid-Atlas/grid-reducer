@@ -1,5 +1,7 @@
 import networkx as nx
 import copy
+from typing import Any
+from itertools import chain
 
 from grid_reducer.altdss.altdss_models import (
     Circuit,
@@ -27,13 +29,22 @@ LINE_TYPE = (
 )
 
 
+def fetch_element_name(element: str) -> str:
+    return element.split(".")[1] if "." in element else element
+
+
+def fetch_element_names(obj_type: Any) -> list[str]:
+    """Fetches element names from a given object type."""
+    if hasattr(obj_type, "root") and hasattr(obj_type.root, "root"):
+        return [fetch_element_name(item.Element) for item in obj_type.root.root]
+    return []
+
+
 def _get_list_of_edges_to_preserve(network: nx.Graph, ckt: Circuit) -> list[tuple[str, str]]:
     """Assumes switches and transformers to be preserved."""
     edges_to_preserve = set()
-    capacitor_control_elements = (
-        [item.Element.split(".")[1] for item in ckt.CapControl.root.root]
-        if ckt.CapControl is not None
-        else []
+    element_names = list(
+        chain.from_iterable(map(fetch_element_names, [ckt.CapControl, ckt.EnergyMeter]))
     )
     for u, v, edge_data in network.edges(data=True):
         edge = (u, v)
@@ -48,9 +59,7 @@ def _get_list_of_edges_to_preserve(network: nx.Graph, ckt: Circuit) -> list[tupl
         ):
             edges_to_preserve.add(edge)
             continue
-        if any(
-            edge_component.Name in capacitor_control_elements for edge_component in edge_components
-        ):
+        if any(edge_component.Name in element_names for edge_component in edge_components):
             edges_to_preserve.add(edge)
     return edges_to_preserve
 
