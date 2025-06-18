@@ -11,21 +11,23 @@ from grid_reducer.utils import (
 )
 
 
-def dfs_tree_with_attrs(graph: nx.Graph, source):
-    if len(list(nx.simple_cycles(graph))) > 0:
-        raise Exception("Loop not supported yet.")
-
+def get_source_connected_component(graph: nx.Graph, source: str) -> nx.Graph:
+    """Get the connected component of the graph that contains the source node."""
     if not nx.is_connected(graph):
         for component in nx.connected_components(graph):
             if source.split(".")[0] in component:
                 print(
                     f"Warning: Removed {len(graph.nodes) - len(component)} nodes not connected to source."
                 )
-                graph = graph.subgraph(component).copy()
-                break
-        else:
-            raise ValueError(f"Source node '{source}' not found in any connected component.")
+                return graph.subgraph(component).copy()
+        raise ValueError(f"Source node '{source}' not found in any connected component.")
+    return graph.copy()
 
+
+def dfs_tree_with_attrs(graph: nx.Graph, source):
+    # if len(list(nx.simple_cycles(graph))) > 0:
+    #     raise Exception("Loop not supported yet.")
+    graph = get_source_connected_component(graph, source)
     dfs_tree: nx.DiGraph = nx.dfs_tree(graph, source)
     for node in dfs_tree.nodes():
         if node in graph.nodes:
