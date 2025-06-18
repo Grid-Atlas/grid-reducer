@@ -7,7 +7,8 @@ import opendssdirect as odd
 from uuid import uuid4
 from pydantic import BaseModel
 
-from grid_reducer.altdss.altdss_models import Circuit, BusConnection
+from grid_reducer.altdss.altdss_models import Circuit, BusConnection, SwtControlState
+
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -132,3 +133,25 @@ def group_objects_excluding_fields(objects: list[T], fields: set) -> dict[str, l
         key = get_tuple_of_values_from_object(obj, obj_type.model_fields.keys() - fields)
         value_mapper[repr(key)].append(obj)
     return value_mapper
+
+
+def get_open_lines(circuit_obj: Circuit) -> list[str]:
+    """Get a list of open lines from the circuit object."""
+    open_lines = []
+    for command in circuit_obj.PostCommands:
+        if command.startswith("Open Line."):
+            open_lines.append(command.split(".")[1].split(" ")[0])
+    return open_lines
+
+
+def get_normally_open_switches(circuit_obj: Circuit) -> list[str]:
+    normally_open_switches = []
+    for line in circuit_obj.Line.root.root:
+        if line.root.Enabled is False:
+            normally_open_switches.append(line.root.Name)
+    if circuit_obj.SwtControl is None:
+        return normally_open_switches
+    for switch in circuit_obj.SwtControl.root.root:
+        if switch.SwitchedObj and switch.Normal == SwtControlState.open:
+            normally_open_switches.append(switch.SwitchedObj.replace("Line.", ""))
+    return normally_open_switches

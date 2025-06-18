@@ -19,9 +19,10 @@ from grid_reducer.altdss.altdss_models import (
     Line,
     Transformer,
     SwtControl,
+    Fuse,
 )
-from grid_reducer.network import get_graph_from_circuit, get_normally_open_switches
-from grid_reducer.utils import get_bus_connected_assets
+from grid_reducer.network import get_graph_from_circuit
+from grid_reducer.utils import get_bus_connected_assets, get_normally_open_switches, get_open_lines
 from grid_reducer.aggregators.registry import AGGREGATION_FUNC_REGISTRY
 
 T = TypeVar("T")
@@ -67,6 +68,19 @@ def _filter_assets_by_graph_nodes(
                 continue
             assets_to_keep[asset_type].extend(get_bus_connected_assets(container_obj, node))
     return assets_to_keep
+
+
+def filter_secondary_switches(
+    switches: list[str], circuit: Circuit, threshold_kv_ln: float
+) -> list[str]:
+    keep_switches = []
+    lines = [line for line in circuit.Line.root.root if line.root.Name in switches]
+    voltage_mapper = {bus.Name: bus.kVLN for bus in circuit.Bus}
+    for line in lines:
+        bus1 = line.root.Bus1.root.split(".")[0]
+        if voltage_mapper[bus1] >= threshold_kv_ln:
+            keep_switches.append(line.root.Name)
+    return keep_switches
 
 
 def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -> Circuit:
@@ -115,9 +129,10 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
         ]
         for cls in [Line, Reactor, Transformer]
     }
-    no_switches = get_normally_open_switches(circuit)
+    no_switches = get_normally_open_switches(circuit) + get_open_lines(circuit)
+    primary_switches = filter_secondary_switches(no_switches, circuit, threshold_kv_ln)
     for line in circuit.Line.root.root:
-        if line.root.Name in no_switches:
+        if line.root.Name in primary_switches:
             assets_to_keep_mapper[Line].append(line.root)
 
     lines_preserved = [line.Name for line in assets_to_keep_mapper[Line]]
@@ -127,12 +142,26 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
             for swt in circuit.SwtControl.root.root
             if swt.SwitchedObj.replace("Line.", "") in lines_preserved
         ]
+    if circuit.Fuse is not None:
+        assets_to_keep_mapper[Fuse] = [
+            fuse
+            for fuse in circuit.Fuse.root.root
+            if fuse.MonitoredObj.replace("Line.", "") in lines_preserved
+        ]
     for asset_type, assets in assets_to_keep_mapper.items():
         if not assets:
             setattr(new_circuit, asset_type.__name__, None)
             continue
         _update_circuit_in_place(new_circuit, assets, asset_type)
 
+    post_commands = []
+    for command in circuit.PostCommands:
+        if command.startswith("Open Line."):
+            line_name = command.split(".")[1].split(" ")[0]
+            if line_name not in lines_preserved:
+                continue
+        post_commands.append(command)
+    new_circuit.PostCommands = post_commands
     new_circuit.Bus = [bus for bus in new_circuit.Bus if bus.Name in nodes_to_keep]
     return new_circuit
 
