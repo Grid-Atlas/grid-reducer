@@ -25,8 +25,6 @@ def get_source_connected_component(graph: nx.Graph, source: str) -> nx.Graph:
 
 
 def dfs_tree_with_attrs(graph: nx.Graph, source):
-    # if len(list(nx.simple_cycles(graph))) > 0:
-    #     raise Exception("Loop not supported yet.")
     graph = get_source_connected_component(graph, source)
     dfs_tree: nx.DiGraph = nx.dfs_tree(graph, source)
     for node in dfs_tree.nodes():
