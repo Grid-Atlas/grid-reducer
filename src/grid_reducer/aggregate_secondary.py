@@ -21,8 +21,13 @@ from grid_reducer.altdss.altdss_models import (
     SwtControl,
     Fuse,
 )
-from grid_reducer.network import get_graph_from_circuit
-from grid_reducer.utils import get_bus_connected_assets, get_normally_open_switches, get_open_lines
+from grid_reducer.network import get_graph_from_circuit, get_source_connected_component
+from grid_reducer.utils import (
+    get_bus_connected_assets,
+    get_circuit_bus_name,
+    get_normally_open_switches,
+    get_open_lines,
+)
 from grid_reducer.aggregators.registry import AGGREGATION_FUNC_REGISTRY
 
 T = TypeVar("T")
@@ -83,6 +88,10 @@ def filter_secondary_switches(
     return keep_switches
 
 
+def get_edge_names(graph: nx.Graph) -> set[str]:
+    return set([data["name"] for _, _, data in graph.edges(data=True)])
+
+
 def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -> Circuit:
     """
     Aggregates assets connected at voltage levels lower than a given threshold
@@ -90,6 +99,10 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
     """
     # Convert circuit to a directed graph
     dgraph: nx.DiGraph = get_graph_from_circuit(circuit, directed=True)
+    ugraph: nx.Graph = get_source_connected_component(
+        get_graph_from_circuit(circuit, directed=False), get_circuit_bus_name(circuit)
+    )
+    pruned_edge_names = list(get_edge_names(ugraph) - get_edge_names(dgraph))
 
     # Filter nodes to keep those above the threshold voltage
     nodes_to_keep = [node for node in dgraph.nodes if dgraph.nodes[node]["kv"] >= threshold_kv_ln]
@@ -129,7 +142,7 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
         ]
         for cls in [Line, Reactor, Transformer]
     }
-    no_switches = get_normally_open_switches(circuit) + get_open_lines(circuit)
+    no_switches = get_normally_open_switches(circuit) + get_open_lines(circuit) + pruned_edge_names
     primary_switches = filter_secondary_switches(no_switches, circuit, threshold_kv_ln)
     for line in circuit.Line.root.root:
         if line.root.Name in primary_switches:
