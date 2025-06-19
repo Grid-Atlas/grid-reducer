@@ -6,6 +6,9 @@ from collections import defaultdict
 import opendssdirect as odd
 from uuid import uuid4
 from pydantic import BaseModel
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 
 from grid_reducer.altdss.altdss_models import Circuit, BusConnection, SwtControlState
 
@@ -155,3 +158,16 @@ def get_normally_open_switches(circuit_obj: Circuit) -> list[str]:
         if switch.SwitchedObj and switch.Normal == SwtControlState.open:
             normally_open_switches.append(switch.SwitchedObj.replace("Line.", ""))
     return normally_open_switches
+
+
+console = Console()
+
+
+def print_summary_to_cli(summary: dict):
+    text = ""
+    for section, details in summary.items():
+        text += f"{section}:\n"
+        for key, val in details.items():
+            text += f"  - {key}: {val}\n"
+    markdown = Markdown(text)
+    console.print(Panel.fit(markdown, title="🧾 Summary Report", border_style="green"))

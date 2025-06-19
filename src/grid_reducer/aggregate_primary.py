@@ -2,6 +2,7 @@ import networkx as nx
 import copy
 from typing import Any
 from itertools import chain
+from collections import defaultdict
 
 from grid_reducer.altdss.altdss_models import (
     Circuit,
@@ -17,6 +18,7 @@ from grid_reducer.network import get_graph_from_circuit
 from grid_reducer.aggregate_secondary import _update_circuit_in_place
 from grid_reducer.similarity.line import LineSimilarity
 from grid_reducer.aggregators.line import aggregate_lines
+from grid_reducer.summary import PrimaryAssetSummary, PrimaryAssetSummaryItem
 
 
 LINE_TYPE = (
@@ -208,6 +210,7 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
     This function intends to aggregate similar primary branches
     and preserves capacitor, transformers and switches.
     """
+    summary = PrimaryAssetSummary(name="🔗 Merged Primary Edges", items=[])
     dgraph = get_graph_from_circuit(circuit, directed=True)
     edges_to_preserve = _get_list_of_edges_to_preserve(dgraph, circuit)
     nodes_to_preserve = _get_list_of_nodes_to_preserve(circuit)
@@ -223,7 +226,7 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
 
     lines_aggregated, lines_to_remove = [], []
     similarity_checker = LineSimilarity()
-
+    agg_summary_dict = defaultdict(lambda: defaultdict(int))
     for graph in aggregatable_segments:
         assert is_linear_tree(graph)
         sorted_edges = topologically_sorted_edges(graph)
@@ -244,15 +247,25 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
                 similar_edges.append(edge_comp)
                 continue
             if len(similar_edges) > 1:
+                agg_summary_dict[current_edge_type]["aggregated"] += 1
+                agg_summary_dict[current_edge_type]["removed"] += len(similar_edges)
                 lines_aggregated.append(aggregate_lines(similar_edges))
                 lines_to_remove.extend(similar_edges)
             similar_edges = [edge_comp]
             current_edge_type = type(edge_comp)
 
         if len(similar_edges) > 1:
+            agg_summary_dict[current_edge_type]["aggregated"] += 1
+            agg_summary_dict[current_edge_type]["removed"] += len(similar_edges)
             lines_aggregated.append(aggregate_lines(similar_edges))
             lines_to_remove.extend(similar_edges)
 
+    for asset_type, counts in agg_summary_dict.items():
+        summary.items.append(
+            PrimaryAssetSummaryItem(
+                asset_type=asset_type, merged=counts["aggregated"], removed=counts["removed"]
+            )
+        )
     all_lines = [line.root for line in circuit.Line.root.root]
     line_names_to_remove = [line.Name for line in lines_to_remove]
     filtered_lines: list[LINE_TYPE] = [
@@ -264,7 +277,7 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
     new_circuit.Bus = [bus for bus in new_circuit.Bus if bus.Name in buses_to_keep]
     print(f"Number of aggregated lines = {len(lines_aggregated)}")
     print(f"Number of removed lines = {len(lines_to_remove)}")
-    return new_circuit
+    return new_circuit, summary
 
 
 def _get_buses_to_keep(circuit: Circuit) -> set:
