@@ -29,6 +29,7 @@ from grid_reducer.utils import (
     get_open_lines,
 )
 from grid_reducer.aggregators.registry import AGGREGATION_FUNC_REGISTRY
+from grid_reducer.summary import SecondaryAssetSummary, SecondaryAssetSummaryItem
 
 T = TypeVar("T")
 
@@ -92,7 +93,9 @@ def get_edge_names(graph: nx.Graph) -> set[str]:
     return set([data["name"] for _, _, data in graph.edges(data=True)])
 
 
-def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -> Circuit:
+def aggregate_secondary_assets(
+    circuit: Circuit, threshold_kv_ln: float = 1.0
+) -> tuple[Circuit, SecondaryAssetSummary]:
     """
     Aggregates assets connected at voltage levels lower than a given threshold
     to a parent node with a voltage close to the threshold.
@@ -103,6 +106,7 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
         get_graph_from_circuit(circuit, directed=False), get_circuit_bus_name(circuit)
     )
     pruned_edge_names = list(get_edge_names(ugraph) - get_edge_names(dgraph))
+    summary = SecondaryAssetSummary(name="🧹 Removed Secondary Assets", items=[])
 
     # Filter nodes to keep those above the threshold voltage
     nodes_to_keep = [node for node in dgraph.nodes if dgraph.nodes[node]["kv"] >= threshold_kv_ln]
@@ -112,6 +116,7 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
     aggregated_assets = defaultdict(list)
     asset_types = [Load, PVSystem, Capacitor, Storage, Generator, Reactor]
     for asset_type in asset_types:
+        agg_nodes, reduced_assets = 0, 0
         for node in agg_graph.nodes:
             if agg_graph.out_degree(node) < dgraph.out_degree(node):
                 successors_diff = set(dgraph.successors(node)) - set(agg_graph.successors(node))
@@ -124,7 +129,15 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
                     node, dgraph, dgraph.subgraph(successors_descendants), asset_type, circuit
                 )
                 if agg_assets:
+                    agg_nodes += 1
+                    reduced_assets += len(agg_assets)
                     aggregated_assets[asset_type].extend(agg_assets)
+        if agg_nodes and reduced_assets:
+            summary.items.append(
+                SecondaryAssetSummaryItem(
+                    asset_type=asset_type, removed_count=agg_nodes, aggregated_count=reduced_assets
+                )
+            )
 
     new_circuit = copy.deepcopy(circuit)
     assets_to_keep = _filter_assets_by_graph_nodes(nodes_to_keep, circuit, asset_types)
@@ -176,7 +189,7 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
         post_commands.append(command)
     new_circuit.PostCommands = post_commands
     new_circuit.Bus = [bus for bus in new_circuit.Bus if bus.Name in nodes_to_keep]
-    return new_circuit
+    return new_circuit, summary
 
 
 def _aggregate_leaf_assets(

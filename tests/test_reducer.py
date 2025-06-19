@@ -31,7 +31,7 @@ def test_networkx_graph_creation(file):
 @pytest.mark.parametrize("file", files)
 def test_secondary_aggregation(file, tmp_path):
     circuit = get_ckt_from_opendss_model(file)
-    new_circuit = aggregate_secondary_assets(circuit)
+    new_circuit, _ = aggregate_secondary_assets(circuit)
     original_circuit_file = tmp_path / "original_ckt.dss"
     reduced_circuit_file = tmp_path / "reduced_ckt.dss"
     write_to_opendss_file(circuit, original_circuit_file)
