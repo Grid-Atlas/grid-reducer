@@ -58,13 +58,14 @@ def main():
             if version.parse(latest).major > version.parse(current).major:
                 updates.append(f"- **{dep}**: {current} → {latest}")
 
+    output_file = Path("major_updates.txt")
     if updates:
-        print("### 🚨 New Major Versions Detected\n")
-        print("The following dependencies have newer **major versions** available:\n")
-        for line in updates:
-            print(line)
-    else:
-        print("")
+        with output_file.open("w") as f:
+            f.write("### 🚨 New Major Versions Detected\n\n")
+            f.write("The following dependencies have newer **major versions** available:\n\n")
+            f.writelines(line + "\n" for line in updates)
+    elif output_file.exists():
+        output_file.unlink()
 
 
 if __name__ == "__main__":
