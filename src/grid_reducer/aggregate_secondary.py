@@ -101,16 +101,18 @@ def aggregate_secondary_assets(
     to a parent node with a voltage close to the threshold.
     """
     # Convert circuit to a directed graph
-    dgraph: nx.DiGraph = get_graph_from_circuit(circuit, directed=True)
-    ugraph: nx.Graph = get_source_connected_component(
+    d_graph: nx.DiGraph = get_graph_from_circuit(circuit, directed=True)
+    u_graph: nx.Graph = get_source_connected_component(
         get_graph_from_circuit(circuit, directed=False), get_circuit_bus_name(circuit)
     )
-    pruned_edge_names = list(get_edge_names(ugraph) - get_edge_names(dgraph))
+    pruned_edge_names = list(get_edge_names(u_graph) - get_edge_names(d_graph))
     summary = SecondaryAssetSummary(name="🧹 Removed Secondary Assets", items=[])
 
     # Filter nodes to keep those above the threshold voltage
-    nodes_to_keep = [node for node in dgraph.nodes if dgraph.nodes[node]["kv"] >= threshold_kv_ln]
-    agg_graph: nx.DiGraph = dgraph.subgraph(nodes_to_keep)
+    nodes_to_keep = [
+        node for node in d_graph.nodes if d_graph.nodes[node]["kv"] >= threshold_kv_ln
+    ]
+    agg_graph: nx.DiGraph = d_graph.subgraph(nodes_to_keep)
 
     # Aggregate assets for each leaf node
     aggregated_assets = defaultdict(list)
@@ -118,15 +120,15 @@ def aggregate_secondary_assets(
     for asset_type in asset_types:
         agg_nodes, reduced_assets = 0, 0
         for node in agg_graph.nodes:
-            if agg_graph.out_degree(node) < dgraph.out_degree(node):
-                successors_diff = set(dgraph.successors(node)) - set(agg_graph.successors(node))
+            if agg_graph.out_degree(node) < d_graph.out_degree(node):
+                successors_diff = set(d_graph.successors(node)) - set(agg_graph.successors(node))
                 successors_descendants = [
-                    snode
+                    s_node
                     for successor in successors_diff
-                    for snode in nx.descendants(dgraph, successor)
+                    for s_node in nx.descendants(d_graph, successor)
                 ] + list(successors_diff)
                 agg_assets = _aggregate_leaf_assets(
-                    node, dgraph, dgraph.subgraph(successors_descendants), asset_type, circuit
+                    node, d_graph, d_graph.subgraph(successors_descendants), asset_type, circuit
                 )
                 if agg_assets:
                     agg_nodes += 1
@@ -193,7 +195,7 @@ def aggregate_secondary_assets(
 
 
 def _aggregate_leaf_assets(
-    leaf: str, dgraph: nx.DiGraph, descendant_graph: nx.DiGraph, asset_type: T, circuit: Circuit
+    leaf: str, d_graph: nx.DiGraph, descendant_graph: nx.DiGraph, asset_type: T, circuit: Circuit
 ) -> list[T] | None:
     """Helper function to aggregate assets for a given leaf node."""
 
@@ -202,7 +204,7 @@ def _aggregate_leaf_assets(
         return
 
     # Get incoming edges and extract bus information
-    in_edges = [data["edge"] for _, _, data in dgraph.in_edges(leaf, data=True)]
+    in_edges = [data["edge"] for _, _, data in d_graph.in_edges(leaf, data=True)]
     leaf_bus_set = _extract_leaf_buses(leaf, in_edges)
 
     if len(leaf_bus_set) > 1:
@@ -212,7 +214,7 @@ def _aggregate_leaf_assets(
         for node in descendant_graph.nodes
         for asset in get_bus_connected_assets(asset_container, node)
     ]
-    return aggregate_generic_objects(assets, bus1=leaf_bus_set.pop(), kv=dgraph.nodes[leaf]["kv"])
+    return aggregate_generic_objects(assets, bus1=leaf_bus_set.pop(), kv=d_graph.nodes[leaf]["kv"])
 
 
 def combine_bus_names(bus_names):

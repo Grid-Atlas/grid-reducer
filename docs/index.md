@@ -35,6 +35,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 conda create -n grid-reducer-env python=3.10
 conda activate grid-reducer-env
 ```
+
 </details>
 
 ## 🚀 Step 3: Install the Project Locally
@@ -47,10 +48,9 @@ pip install -e .
 
 ✅ This will also install all required dependencies.
 
-
 ## 🛠 Example CLI Usage
 
-Once installed, you can use command line inteface. Run `grid --help` to see all the avaialble command options.
+Once installed, you can use command line interface. Run `grid --help` to see all the available command options.
 
 Here is a minimal example to reduce OpenDSS model.
 
@@ -58,9 +58,9 @@ Here is a minimal example to reduce OpenDSS model.
 grid reduce -f Master.dss
 ```
 
-## Example Programmetic Usage
+## Example Python Usage
 
-You can also reduce the feeder model through python scripts. 
+You can also reduce the feeder model through python scripts.
 
 Here is a minimal example to reduce OpenDSS feeder model using Python Script.
 
@@ -83,8 +83,8 @@ reducer.export(reduced_ckt, reduced_circuit_file)
 
 ## 📌 Notes
 
-- This is the recommended way to use the project during development.
-- In the future, the project may support installation via:
+* This is the recommended way to use the project during development.
+* In the future, the project may support installation via:
 
 ```bash
 pip install grid-reducer

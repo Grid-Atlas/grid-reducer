@@ -17,21 +17,21 @@ from grid_reducer.reducer import OpenDSSModelReducer
     "--remove-secondary",
     type=click.BOOL,
     default=True,
-    help="Boolean falg indicating whether to reduce secondary or not.",
+    help="Boolean flag indicating whether to reduce secondary or not.",
 )
 @click.option(
     "-ap",
     "--aggregate-primary",
     type=click.BOOL,
     default=True,
-    help="Boolean falg indicating whether to aggregate primary ckt or not.",
+    help="Boolean flag indicating whether to aggregate primary ckt or not.",
 )
 @click.option(
     "-tc",
     "--transform-coordinate",
     type=click.BOOL,
     default=True,
-    help="Boolean falg indicating whether to transform coordinates or not.",
+    help="Boolean flag indicating whether to transform coordinates or not.",
 )
 @click.option(
     "-eo",

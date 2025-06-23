@@ -1,0 +1,46 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "dictionaries": ["en_US", "python", "softwareTerms"],
+  "ignorePaths": [
+    "**/__pycache__/**",
+    "**/*.egg-info/**",
+    "src/grid_reducer/altdss"
+  ],
+  "words": [
+    "mkdocs",
+    "OpenDSS",
+    "AltDSS",
+    "feeder",
+    "CLI",
+    "SMARTDS",
+    "NREL",
+    "OEDI",
+    "Battelle",
+    "kw",
+    "kvar",
+    "opendssdirect",
+    "Xfmr",
+    "kwkvar",
+    "pmpp",
+    "ratedkvar",
+    "upfc",
+    "postcommands",
+    "pvsystems",
+    "vapf",
+    "kvapf",
+    "ycurve",
+    "kwpf",
+    "csource",
+    "kamada",
+    "kawai",
+    "espvl",
+    "aggregatable"
+  ],
+  "overrides": [
+    {
+      "filename": "**/*.py",
+      "languageId": "python"
+    }
+  ]
+}

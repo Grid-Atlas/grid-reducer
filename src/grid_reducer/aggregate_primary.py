@@ -98,9 +98,9 @@ def _get_list_of_nodes_to_preserve(circuit: Circuit) -> set[str]:
     return nodes_to_be_preserved
 
 
-def extract_segments_from_linear_tree(dgraph: nx.DiGraph, subset: set[str]) -> list[nx.DiGraph]:
+def extract_segments_from_linear_tree(d_graph: nx.DiGraph, subset: set[str]) -> list[nx.DiGraph]:
     subset = set(subset)
-    nodes = list(nx.topological_sort(dgraph))
+    nodes = list(nx.topological_sort(d_graph))
 
     if not nodes:
         return []
@@ -113,13 +113,13 @@ def extract_segments_from_linear_tree(dgraph: nx.DiGraph, subset: set[str]) -> l
         if node in subset:
             edges = list(zip(current_path, current_path[1:], strict=False))
             if edges:
-                segments.append(dgraph.edge_subgraph(edges).copy())
+                segments.append(d_graph.edge_subgraph(edges).copy())
             current_path = [node]  # start new segment from here
 
     # Add trailing segment if any
     if len(current_path) > 1:
         edges = list(zip(current_path, current_path[1:], strict=False))
-        segments.append(dgraph.edge_subgraph(edges).copy())
+        segments.append(d_graph.edge_subgraph(edges).copy())
 
     return segments
 
@@ -160,11 +160,11 @@ def get_linear_trees(G):
     linear_subtrees = []
 
     def walk_from(node):
-        for succ in G.successors(node):
-            if (node, succ) in visited_edges:
+        for successor in G.successors(node):
+            if (node, successor) in visited_edges:
                 continue
-            path = [node, succ]
-            current = succ
+            path = [node, successor]
+            current = successor
             while G.in_degree(current) == 1 and G.out_degree(current) == 1:
                 next_node = next(G.successors(current))
                 path.append(next_node)
@@ -211,10 +211,10 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
     and preserves capacitor, transformers and switches.
     """
     summary = PrimaryAssetSummary(name="🔗 Merged Primary Edges", items=[])
-    dgraph = get_graph_from_circuit(circuit, directed=True)
-    edges_to_preserve = _get_list_of_edges_to_preserve(dgraph, circuit)
+    d_graph = get_graph_from_circuit(circuit, directed=True)
+    edges_to_preserve = _get_list_of_edges_to_preserve(d_graph, circuit)
     nodes_to_preserve = _get_list_of_nodes_to_preserve(circuit)
-    linear_trees = _get_linear_trees_from_graph(dgraph, edges_to_preserve)
+    linear_trees = _get_linear_trees_from_graph(d_graph, edges_to_preserve)
     multi_edge_trees = [tree for tree in linear_trees if len(tree.edges) > 1]
     aggregatable_segments: list[nx.DiGraph] = []
     for tree in multi_edge_trees:
