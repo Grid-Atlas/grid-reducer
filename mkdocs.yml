@@ -37,6 +37,7 @@ nav:
   - Getting Started:
       - Getting Started: index.md
       - Downloading SMARTDS Model: getting-started/smartds.md
+      - Developer Guides: getting-started/dev-guides.md
   - Approch: approach.md
 extra: 
   version:
