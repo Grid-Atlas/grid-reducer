@@ -21,6 +21,6 @@ download_s3_folder(
 
 ## 💡 Why Use This?
 
-- Provides a ready-to-use OpenDSS model for testing the reducer.
-- Helps you get started without needing access to proprietary feeder data.
-- Pulls directly from NREL’s OEDI S3 public dataset.
+* Provides a ready-to-use OpenDSS model for testing the reducer.
+* Helps you get started without needing access to proprietary feeder data.
+* Pulls directly from NREL’s OEDI S3 public dataset.
