@@ -7,7 +7,7 @@ import networkx as nx
 from grid_reducer.altdss.altdss_models import Circuit
 from grid_reducer.network import get_graph_from_circuit
 from grid_reducer.utils import extract_bus_name
-from grid_reducer.add_differential_privacy import get_dp_circuit
+
 
 
 def get_switch_connected_buses(circuit: Circuit) -> list[str]:
@@ -55,9 +55,6 @@ def transform_bus_coordinates(circuit: Circuit, noise_level:str = "low") -> Circ
 
     switch_buses = get_switch_connected_buses(circuit)
     new_circuit = remove_bus_coordinates(circuit, switch_buses)
-    print(f"Circuit: {circuit}")
-    print(f"switch_buses: {switch_buses}")
-    print(f"new_circuit: {new_circuit}")
     if switch_buses:
         return new_circuit
 
@@ -70,17 +67,12 @@ def transform_bus_coordinates(circuit: Circuit, noise_level:str = "low") -> Circ
     #print(circuit.Bus[0])
     
     print(f"Time: {time.time() - start}")
-    if(noise_level == "none"):
-        print("No noise added to the coordinates.")
-        new_buses= []
-        for bus in circuit.Bus:
-            new_bus = copy.deepcopy(bus)
-            new_bus.X = pos[bus.Name][0]
-            new_bus.Y = pos[bus.Name][1]
-            new_buses.append(new_bus)
-        new_circuit = copy.deepcopy(circuit)
-        new_circuit.Bus = new_buses
-        return new_circuit
-    else:
-        new_circuit = get_dp_circuit(circuit, pos, noise_level)
-        return new_circuit
+    new_buses= []
+    for bus in circuit.Bus:
+        new_bus = copy.deepcopy(bus)
+        new_bus.X = pos[bus.Name][0]
+        new_bus.Y = pos[bus.Name][1]
+        new_buses.append(new_bus)
+    new_circuit = copy.deepcopy(circuit)
+    new_circuit.Bus = new_buses
+    return new_circuit
