@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 
 extra_data
+.python-version

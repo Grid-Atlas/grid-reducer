@@ -6,6 +6,7 @@ from grid_reducer.aggregate_secondary import aggregate_secondary_assets
 from grid_reducer.aggregate_primary import aggregate_primary_conductors
 from grid_reducer.utils import write_to_opendss_file
 from grid_reducer.transform_coordinate import transform_bus_coordinates
+from grid_reducer.add_differential_privacy import get_dp_circuit
 from grid_reducer.rename_components import rename_assets
 
 
@@ -29,6 +30,7 @@ class OpenDSSModelReducer:
         reduce_secondary: bool = True,
         aggregate_primary: bool = True,
         transform_coordinate: bool = True,
+        noise_level: str = "low",
     ) -> Circuit:
         if reduce_secondary:
             reduced_ckt, summary = aggregate_secondary_assets(self.ckt)
@@ -43,9 +45,11 @@ class OpenDSSModelReducer:
             final_ckt = reduced_ckt
 
         transformed_ckt = (
-            transform_bus_coordinates(final_ckt) if transform_coordinate else final_ckt
+            transform_bus_coordinates(final_ckt, noise_level) if transform_coordinate else final_ckt
         )
-        renamed_ckt = rename_assets(transformed_ckt)
+
+        private_ckt = get_dp_circuit(transformed_ckt,transform_coordinate, noise_level) if noise_level != "none" else transformed_ckt
+        renamed_ckt = rename_assets(private_ckt)
         print(f"Total Node Reductions: {len(self.ckt.Bus)}  → {len(final_ckt.Bus)}")
         print(f"Total Edge Reductions: {get_edge_count(self.ckt)}  → {get_edge_count(final_ckt)}")
         return renamed_ckt

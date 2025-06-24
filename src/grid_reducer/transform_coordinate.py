@@ -1,11 +1,13 @@
 import copy
 import time
+import numpy as np
 
 import networkx as nx
 
 from grid_reducer.altdss.altdss_models import Circuit
 from grid_reducer.network import get_graph_from_circuit
 from grid_reducer.utils import extract_bus_name
+
 
 
 def get_switch_connected_buses(circuit: Circuit) -> list[str]:
@@ -45,19 +47,27 @@ def remove_bus_coordinates(circuit: Circuit, preserve_buses: list[str] | None):
     return new_circuit
 
 
-def transform_bus_coordinates(circuit: Circuit) -> Circuit:
+
+
+
+def transform_bus_coordinates(circuit: Circuit, noise_level:str = "low") -> Circuit:
     """Function to transform the coordinates so it's not traceable."""
 
     switch_buses = get_switch_connected_buses(circuit)
     new_circuit = remove_bus_coordinates(circuit, switch_buses)
     if switch_buses:
         return new_circuit
+
+    
     graph = get_graph_from_circuit(new_circuit)
-    start = time.time()
     print("Transforming coordinates...")
+    start = time.time()
     pos = nx.kamada_kawai_layout(graph)
+    #print(pos)
+    #print(circuit.Bus[0])
+    
     print(f"Time: {time.time() - start}")
-    new_buses = []
+    new_buses= []
     for bus in circuit.Bus:
         new_bus = copy.deepcopy(bus)
         new_bus.X = pos[bus.Name][0]
