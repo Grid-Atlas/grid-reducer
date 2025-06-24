@@ -7,6 +7,7 @@ import networkx as nx
 from grid_reducer.altdss.altdss_models import Circuit
 from grid_reducer.network import get_graph_from_circuit
 from grid_reducer.utils import extract_bus_name
+from grid_reducer.add_differential_privacy import get_dp_circuit
 
 
 def get_switch_connected_buses(circuit: Circuit) -> list[str]:
@@ -45,50 +46,41 @@ def remove_bus_coordinates(circuit: Circuit, preserve_buses: list[str] | None):
     new_circuit.Bus = new_buses
     return new_circuit
 
-def add_gaussian_noise(value: float, std_dev: float) -> float:
-    """
-    Add Gaussian noise to a value, based on the given standard deviation.
-
-    Args:
-        value (float): Original value to perturb.
-        std_dev (float): Standard deviation of the Gaussian noise.
-
-    Returns:
-        float: Perturbed value with Gaussian noise applied.
-    """
-    noise = np.random.normal(0, std_dev)  # Generate Gaussian noise centered at 0
-    return value + noise
 
 
 
 
-def transform_bus_coordinates(circuit: Circuit) -> Circuit:
+def transform_bus_coordinates(circuit: Circuit, noise_level:str = "low") -> Circuit:
     """Function to transform the coordinates so it's not traceable."""
 
     switch_buses = get_switch_connected_buses(circuit)
     new_circuit = remove_bus_coordinates(circuit, switch_buses)
+    print(f"Circuit: {circuit}")
+    print(f"switch_buses: {switch_buses}")
+    print(f"new_circuit: {new_circuit}")
     if switch_buses:
         return new_circuit
 
-    noise_scale = 0.01
-    std_dev = noise_scale
+    
     graph = get_graph_from_circuit(new_circuit)
     print("Transforming coordinates...")
     start = time.time()
     pos = nx.kamada_kawai_layout(graph)
-    print(pos)
-    print(circuit.Bus[0])
+    #print(pos)
+    #print(circuit.Bus[0])
     
     print(f"Time: {time.time() - start}")
-    new_buses= []
-    for bus in circuit.Bus:
-        new_bus = copy.deepcopy(bus)
-        new_bus.X = pos[bus.Name][0]
-        new_bus.Y = pos[bus.Name][1]
-        # Add Gaussian noise to the coordinates
-        new_bus.X = add_gaussian_noise(new_bus.X, std_dev)
-        new_bus.Y = add_gaussian_noise(new_bus.Y, std_dev)
-        new_buses.append(new_bus)
-    new_circuit = copy.deepcopy(circuit)
-    new_circuit.Bus = new_buses
-    return new_circuit 
+    if(noise_level == "none"):
+        print("No noise added to the coordinates.")
+        new_buses= []
+        for bus in circuit.Bus:
+            new_bus = copy.deepcopy(bus)
+            new_bus.X = pos[bus.Name][0]
+            new_bus.Y = pos[bus.Name][1]
+            new_buses.append(new_bus)
+        new_circuit = copy.deepcopy(circuit)
+        new_circuit.Bus = new_buses
+        return new_circuit
+    else:
+        new_circuit = get_dp_circuit(circuit, pos, noise_level)
+        return new_circuit

@@ -19,11 +19,12 @@ class OpenDSSModelReducer:
         reduce_secondary: bool = True,
         aggregate_primary: bool = True,
         transform_coordinate: bool = True,
+        noise_level: str = "low",
     ) -> Circuit:
         reduced_ckt = aggregate_secondary_assets(self.ckt) if reduce_secondary else self.ckt
         final_ckt = aggregate_primary_conductors(reduced_ckt) if aggregate_primary else reduced_ckt
         transformed_ckt = (
-            transform_bus_coordinates(final_ckt) if transform_coordinate else final_ckt
+            transform_bus_coordinates(final_ckt, noise_level) if transform_coordinate else final_ckt
         )
         renamed_ckt = rename_assets(transformed_ckt)
         return renamed_ckt
