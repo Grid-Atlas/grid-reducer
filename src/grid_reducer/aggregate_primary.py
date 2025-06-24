@@ -1,5 +1,8 @@
 import networkx as nx
 import copy
+from typing import Any
+from itertools import chain
+from collections import defaultdict
 
 from grid_reducer.altdss.altdss_models import (
     Circuit,
@@ -15,6 +18,7 @@ from grid_reducer.network import get_graph_from_circuit
 from grid_reducer.aggregate_secondary import _update_circuit_in_place
 from grid_reducer.similarity.line import LineSimilarity
 from grid_reducer.aggregators.line import aggregate_lines
+from grid_reducer.summary import PrimaryAssetSummary, PrimaryAssetSummaryItem
 
 
 LINE_TYPE = (
@@ -27,13 +31,22 @@ LINE_TYPE = (
 )
 
 
+def fetch_element_name(element: str) -> str:
+    return element.split(".")[1] if "." in element else element
+
+
+def fetch_element_names(obj_type: Any) -> list[str]:
+    """Fetches element names from a given object type."""
+    if hasattr(obj_type, "root") and hasattr(obj_type.root, "root"):
+        return [fetch_element_name(item.Element) for item in obj_type.root.root]
+    return []
+
+
 def _get_list_of_edges_to_preserve(network: nx.Graph, ckt: Circuit) -> list[tuple[str, str]]:
     """Assumes switches and transformers to be preserved."""
     edges_to_preserve = set()
-    capacitor_control_elements = (
-        [item.Element.split(".")[1] for item in ckt.CapControl.root.root]
-        if ckt.CapControl is not None
-        else []
+    element_names = list(
+        chain.from_iterable(map(fetch_element_names, [ckt.CapControl, ckt.EnergyMeter]))
     )
     for u, v, edge_data in network.edges(data=True):
         edge = (u, v)
@@ -48,9 +61,7 @@ def _get_list_of_edges_to_preserve(network: nx.Graph, ckt: Circuit) -> list[tupl
         ):
             edges_to_preserve.add(edge)
             continue
-        if any(
-            edge_component.Name in capacitor_control_elements for edge_component in edge_components
-        ):
+        if any(edge_component.Name in element_names for edge_component in edge_components):
             edges_to_preserve.add(edge)
     return edges_to_preserve
 
@@ -87,9 +98,9 @@ def _get_list_of_nodes_to_preserve(circuit: Circuit) -> set[str]:
     return nodes_to_be_preserved
 
 
-def extract_segments_from_linear_tree(dgraph: nx.DiGraph, subset: set[str]) -> list[nx.DiGraph]:
+def extract_segments_from_linear_tree(d_graph: nx.DiGraph, subset: set[str]) -> list[nx.DiGraph]:
     subset = set(subset)
-    nodes = list(nx.topological_sort(dgraph))
+    nodes = list(nx.topological_sort(d_graph))
 
     if not nodes:
         return []
@@ -102,13 +113,13 @@ def extract_segments_from_linear_tree(dgraph: nx.DiGraph, subset: set[str]) -> l
         if node in subset:
             edges = list(zip(current_path, current_path[1:], strict=False))
             if edges:
-                segments.append(dgraph.edge_subgraph(edges).copy())
+                segments.append(d_graph.edge_subgraph(edges).copy())
             current_path = [node]  # start new segment from here
 
     # Add trailing segment if any
     if len(current_path) > 1:
         edges = list(zip(current_path, current_path[1:], strict=False))
-        segments.append(dgraph.edge_subgraph(edges).copy())
+        segments.append(d_graph.edge_subgraph(edges).copy())
 
     return segments
 
@@ -149,11 +160,11 @@ def get_linear_trees(G):
     linear_subtrees = []
 
     def walk_from(node):
-        for succ in G.successors(node):
-            if (node, succ) in visited_edges:
+        for successor in G.successors(node):
+            if (node, successor) in visited_edges:
                 continue
-            path = [node, succ]
-            current = succ
+            path = [node, successor]
+            current = successor
             while G.in_degree(current) == 1 and G.out_degree(current) == 1:
                 next_node = next(G.successors(current))
                 path.append(next_node)
@@ -199,10 +210,11 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
     This function intends to aggregate similar primary branches
     and preserves capacitor, transformers and switches.
     """
-    dgraph = get_graph_from_circuit(circuit, directed=True)
-    edges_to_preserve = _get_list_of_edges_to_preserve(dgraph, circuit)
+    summary = PrimaryAssetSummary(name="🔗 Merged Primary Edges", items=[])
+    d_graph = get_graph_from_circuit(circuit, directed=True)
+    edges_to_preserve = _get_list_of_edges_to_preserve(d_graph, circuit)
     nodes_to_preserve = _get_list_of_nodes_to_preserve(circuit)
-    linear_trees = _get_linear_trees_from_graph(dgraph, edges_to_preserve)
+    linear_trees = _get_linear_trees_from_graph(d_graph, edges_to_preserve)
     multi_edge_trees = [tree for tree in linear_trees if len(tree.edges) > 1]
     aggregatable_segments: list[nx.DiGraph] = []
     for tree in multi_edge_trees:
@@ -214,7 +226,7 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
 
     lines_aggregated, lines_to_remove = [], []
     similarity_checker = LineSimilarity()
-
+    agg_summary_dict = defaultdict(lambda: defaultdict(int))
     for graph in aggregatable_segments:
         assert is_linear_tree(graph)
         sorted_edges = topologically_sorted_edges(graph)
@@ -235,15 +247,25 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
                 similar_edges.append(edge_comp)
                 continue
             if len(similar_edges) > 1:
+                agg_summary_dict[current_edge_type]["aggregated"] += 1
+                agg_summary_dict[current_edge_type]["removed"] += len(similar_edges)
                 lines_aggregated.append(aggregate_lines(similar_edges))
                 lines_to_remove.extend(similar_edges)
             similar_edges = [edge_comp]
             current_edge_type = type(edge_comp)
 
         if len(similar_edges) > 1:
+            agg_summary_dict[current_edge_type]["aggregated"] += 1
+            agg_summary_dict[current_edge_type]["removed"] += len(similar_edges)
             lines_aggregated.append(aggregate_lines(similar_edges))
             lines_to_remove.extend(similar_edges)
 
+    for asset_type, counts in agg_summary_dict.items():
+        summary.items.append(
+            PrimaryAssetSummaryItem(
+                asset_type=asset_type, merged=counts["aggregated"], removed=counts["removed"]
+            )
+        )
     all_lines = [line.root for line in circuit.Line.root.root]
     line_names_to_remove = [line.Name for line in lines_to_remove]
     filtered_lines: list[LINE_TYPE] = [
@@ -255,7 +277,7 @@ def aggregate_primary_conductors(circuit: Circuit) -> Circuit:
     new_circuit.Bus = [bus for bus in new_circuit.Bus if bus.Name in buses_to_keep]
     print(f"Number of aggregated lines = {len(lines_aggregated)}")
     print(f"Number of removed lines = {len(lines_to_remove)}")
-    return new_circuit
+    return new_circuit, summary
 
 
 def _get_buses_to_keep(circuit: Circuit) -> set:

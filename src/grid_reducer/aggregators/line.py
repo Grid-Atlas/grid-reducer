@@ -39,12 +39,18 @@ def aggregate_lines(lines: list[T]) -> T:
 
     new_line_name = generate_short_name()
     bus1, bus2 = _find_start_end_buses_set_based(lines)
-    total_length = sum([Quantity(line.Length, line.Units.value) for line in lines]).to("m")
+    data = {
+        "Name": new_line_name,
+        "Bus1": bus1,
+        "Bus2": bus2,
+    }
+    if "Length" in line_class.model_fields:
+        data["Length"] = (
+            sum([Quantity(line.Length, line.Units.value) for line in lines]).to("m").magnitude
+        )
+        data["Units"] = LengthUnit.m
+
     return line_class(
-        Name=new_line_name,
-        Bus1=bus1,
-        Bus2=bus2,
-        Length=total_length.magnitude,
-        Units=LengthUnit.m,
+        **data,
         **common_values_dict,
     )

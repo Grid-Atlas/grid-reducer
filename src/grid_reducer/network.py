@@ -2,27 +2,30 @@ from typing import Any
 
 import networkx as nx
 
-from grid_reducer.altdss.altdss_models import SwtControlState
-
 from grid_reducer.altdss.altdss_models import Circuit
-from grid_reducer.utils import get_circuit_bus_name, extract_bus_name
+from grid_reducer.utils import (
+    get_circuit_bus_name,
+    extract_bus_name,
+    get_normally_open_switches,
+    get_open_lines,
+)
 
 
-def dfs_tree_with_attrs(graph: nx.Graph, source):
-    if len(list(nx.simple_cycles(graph))) > 0:
-        raise Exception("Loop not supported yet.")
-
+def get_source_connected_component(graph: nx.Graph, source: str) -> nx.Graph:
+    """Get the connected component of the graph that contains the source node."""
     if not nx.is_connected(graph):
         for component in nx.connected_components(graph):
             if source.split(".")[0] in component:
                 print(
                     f"Warning: Removed {len(graph.nodes) - len(component)} nodes not connected to source."
                 )
-                graph = graph.subgraph(component).copy()
-                break
-        else:
-            raise ValueError(f"Source node '{source}' not found in any connected component.")
+                return graph.subgraph(component).copy()
+        raise ValueError(f"Source node '{source}' not found in any connected component.")
+    return graph.copy()
 
+
+def dfs_tree_with_attrs(graph: nx.Graph, source):
+    graph = get_source_connected_component(graph, source)
     dfs_tree: nx.DiGraph = nx.dfs_tree(graph, source)
     for node in dfs_tree.nodes():
         if node in graph.nodes:
@@ -33,19 +36,6 @@ def dfs_tree_with_attrs(graph: nx.Graph, source):
             dfs_tree.edges[u, v].update(graph.edges[u, v])
 
     return dfs_tree
-
-
-def get_normally_open_switches(circuit_obj: Circuit) -> list[str]:
-    normally_open_switches = []
-    for line in circuit_obj.Line.root.root:
-        if line.root.Enabled is False:
-            normally_open_switches.append(line.root.Name)
-    if circuit_obj.SwtControl is None:
-        return normally_open_switches
-    for switch in circuit_obj.SwtControl.root.root:
-        if switch.SwitchedObj and switch.Normal == SwtControlState.open:
-            normally_open_switches.append(switch.SwitchedObj.replace("Line.", ""))
-    return normally_open_switches
 
 
 def create_bus_voltage_mapper(circuit_obj: Circuit) -> dict[str, float]:
@@ -181,7 +171,7 @@ def add_transformer_components(
 
 def get_graph_from_circuit(circuit_obj: Circuit, directed: bool = False) -> nx.Graph:
     bus_voltage_mapper = create_bus_voltage_mapper(circuit_obj)
-    no_switches = get_normally_open_switches(circuit_obj)
+    no_switches = get_normally_open_switches(circuit_obj) + get_open_lines(circuit_obj)
     graph = nx.Graph()
     add_bus_nodes(graph, circuit_obj)
     add_line_and_reactor_components(graph, circuit_obj, no_switches, bus_voltage_mapper)

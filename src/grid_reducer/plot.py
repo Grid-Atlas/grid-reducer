@@ -30,7 +30,7 @@ def are_nodes_wgs84(graph: nx.Graph) -> bool:
     return True
 
 
-def graph_to_geodataframe(graph: nx.Graph) -> gpd.GeoDataFrame:
+def graph_to_geo_dataframe(graph: nx.Graph) -> gpd.GeoDataFrame:
     if not check_if_graph_has_coordinates(graph):
         raise ValueError("Graph does not have coordinates")
     if not are_nodes_wgs84(graph):

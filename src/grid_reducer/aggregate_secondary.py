@@ -19,10 +19,17 @@ from grid_reducer.altdss.altdss_models import (
     Line,
     Transformer,
     SwtControl,
+    Fuse,
 )
-from grid_reducer.network import get_graph_from_circuit, get_normally_open_switches
-from grid_reducer.utils import get_bus_connected_assets
+from grid_reducer.network import get_graph_from_circuit, get_source_connected_component
+from grid_reducer.utils import (
+    get_bus_connected_assets,
+    get_circuit_bus_name,
+    get_normally_open_switches,
+    get_open_lines,
+)
 from grid_reducer.aggregators.registry import AGGREGATION_FUNC_REGISTRY
+from grid_reducer.summary import SecondaryAssetSummary, SecondaryAssetSummaryItem
 
 T = TypeVar("T")
 
@@ -69,35 +76,70 @@ def _filter_assets_by_graph_nodes(
     return assets_to_keep
 
 
-def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -> Circuit:
+def filter_secondary_switches(
+    switches: list[str], circuit: Circuit, threshold_kv_ln: float
+) -> list[str]:
+    keep_switches = []
+    lines = [line for line in circuit.Line.root.root if line.root.Name in switches]
+    voltage_mapper = {bus.Name: bus.kVLN for bus in circuit.Bus}
+    for line in lines:
+        bus1 = line.root.Bus1.root.split(".")[0]
+        if voltage_mapper[bus1] >= threshold_kv_ln:
+            keep_switches.append(line.root.Name)
+    return keep_switches
+
+
+def get_edge_names(graph: nx.Graph) -> set[str]:
+    return set([data["name"] for _, _, data in graph.edges(data=True)])
+
+
+def aggregate_secondary_assets(
+    circuit: Circuit, threshold_kv_ln: float = 1.0
+) -> tuple[Circuit, SecondaryAssetSummary]:
     """
     Aggregates assets connected at voltage levels lower than a given threshold
     to a parent node with a voltage close to the threshold.
     """
     # Convert circuit to a directed graph
-    dgraph: nx.DiGraph = get_graph_from_circuit(circuit, directed=True)
+    d_graph: nx.DiGraph = get_graph_from_circuit(circuit, directed=True)
+    u_graph: nx.Graph = get_source_connected_component(
+        get_graph_from_circuit(circuit, directed=False), get_circuit_bus_name(circuit)
+    )
+    pruned_edge_names = list(get_edge_names(u_graph) - get_edge_names(d_graph))
+    summary = SecondaryAssetSummary(name="🧹 Removed Secondary Assets", items=[])
 
     # Filter nodes to keep those above the threshold voltage
-    nodes_to_keep = [node for node in dgraph.nodes if dgraph.nodes[node]["kv"] >= threshold_kv_ln]
-    agg_graph: nx.DiGraph = dgraph.subgraph(nodes_to_keep)
+    nodes_to_keep = [
+        node for node in d_graph.nodes if d_graph.nodes[node]["kv"] >= threshold_kv_ln
+    ]
+    agg_graph: nx.DiGraph = d_graph.subgraph(nodes_to_keep)
 
     # Aggregate assets for each leaf node
     aggregated_assets = defaultdict(list)
     asset_types = [Load, PVSystem, Capacitor, Storage, Generator, Reactor]
     for asset_type in asset_types:
+        agg_nodes, reduced_assets = 0, 0
         for node in agg_graph.nodes:
-            if agg_graph.out_degree(node) < dgraph.out_degree(node):
-                successors_diff = set(dgraph.successors(node)) - set(agg_graph.successors(node))
+            if agg_graph.out_degree(node) < d_graph.out_degree(node):
+                successors_diff = set(d_graph.successors(node)) - set(agg_graph.successors(node))
                 successors_descendants = [
-                    snode
+                    s_node
                     for successor in successors_diff
-                    for snode in nx.descendants(dgraph, successor)
+                    for s_node in nx.descendants(d_graph, successor)
                 ] + list(successors_diff)
                 agg_assets = _aggregate_leaf_assets(
-                    node, dgraph, dgraph.subgraph(successors_descendants), asset_type, circuit
+                    node, d_graph, d_graph.subgraph(successors_descendants), asset_type, circuit
                 )
                 if agg_assets:
+                    agg_nodes += 1
+                    reduced_assets += len(agg_assets)
                     aggregated_assets[asset_type].extend(agg_assets)
+        if agg_nodes and reduced_assets:
+            summary.items.append(
+                SecondaryAssetSummaryItem(
+                    asset_type=asset_type, removed_count=agg_nodes, aggregated_count=reduced_assets
+                )
+            )
 
     new_circuit = copy.deepcopy(circuit)
     assets_to_keep = _filter_assets_by_graph_nodes(nodes_to_keep, circuit, asset_types)
@@ -115,9 +157,10 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
         ]
         for cls in [Line, Reactor, Transformer]
     }
-    no_switches = get_normally_open_switches(circuit)
+    no_switches = get_normally_open_switches(circuit) + get_open_lines(circuit) + pruned_edge_names
+    primary_switches = filter_secondary_switches(no_switches, circuit, threshold_kv_ln)
     for line in circuit.Line.root.root:
-        if line.root.Name in no_switches:
+        if line.root.Name in primary_switches:
             assets_to_keep_mapper[Line].append(line.root)
 
     lines_preserved = [line.Name for line in assets_to_keep_mapper[Line]]
@@ -127,18 +170,32 @@ def aggregate_secondary_assets(circuit: Circuit, threshold_kv_ln: float = 1.0) -
             for swt in circuit.SwtControl.root.root
             if swt.SwitchedObj.replace("Line.", "") in lines_preserved
         ]
+    if circuit.Fuse is not None:
+        assets_to_keep_mapper[Fuse] = [
+            fuse
+            for fuse in circuit.Fuse.root.root
+            if fuse.MonitoredObj.replace("Line.", "") in lines_preserved
+        ]
     for asset_type, assets in assets_to_keep_mapper.items():
         if not assets:
             setattr(new_circuit, asset_type.__name__, None)
             continue
         _update_circuit_in_place(new_circuit, assets, asset_type)
 
+    post_commands = []
+    for command in circuit.PostCommands:
+        if command.startswith("Open Line."):
+            line_name = command.split(".")[1].split(" ")[0]
+            if line_name not in lines_preserved:
+                continue
+        post_commands.append(command)
+    new_circuit.PostCommands = post_commands
     new_circuit.Bus = [bus for bus in new_circuit.Bus if bus.Name in nodes_to_keep]
-    return new_circuit
+    return new_circuit, summary
 
 
 def _aggregate_leaf_assets(
-    leaf: str, dgraph: nx.DiGraph, descendant_graph: nx.DiGraph, asset_type: T, circuit: Circuit
+    leaf: str, d_graph: nx.DiGraph, descendant_graph: nx.DiGraph, asset_type: T, circuit: Circuit
 ) -> list[T] | None:
     """Helper function to aggregate assets for a given leaf node."""
 
@@ -147,7 +204,7 @@ def _aggregate_leaf_assets(
         return
 
     # Get incoming edges and extract bus information
-    in_edges = [data["edge"] for _, _, data in dgraph.in_edges(leaf, data=True)]
+    in_edges = [data["edge"] for _, _, data in d_graph.in_edges(leaf, data=True)]
     leaf_bus_set = _extract_leaf_buses(leaf, in_edges)
 
     if len(leaf_bus_set) > 1:
@@ -157,7 +214,7 @@ def _aggregate_leaf_assets(
         for node in descendant_graph.nodes
         for asset in get_bus_connected_assets(asset_container, node)
     ]
-    return aggregate_generic_objects(assets, bus1=leaf_bus_set.pop(), kv=dgraph.nodes[leaf]["kv"])
+    return aggregate_generic_objects(assets, bus1=leaf_bus_set.pop(), kv=d_graph.nodes[leaf]["kv"])
 
 
 def combine_bus_names(bus_names):
