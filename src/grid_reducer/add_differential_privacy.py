@@ -60,8 +60,8 @@ def get_dp_circuit(circuit: Circuit, transform_coordinate:bool, noise_level: str
         print(f"Noise level:{noise_level}; Noise scale: {noise_scale}")
         for bus in circuit.Bus:
             new_bus = copy.deepcopy(bus)
-            new_bus.X = apply_gaussian_dp_noise(new_bus.X, noise_scale)
-            new_bus.Y = apply_gaussian_dp_noise(new_bus.Y, noise_scale)
+            new_bus.X = apply_gaussian_dp_noise(new_bus.X, noise_scale) if new_bus.X else new_bus.X
+            new_bus.Y = apply_gaussian_dp_noise(new_bus.Y, noise_scale) if new_bus.Y else new_bus.Y
             new_buses.append(new_bus)
         new_circuit = copy.deepcopy(circuit)
         new_circuit.Bus = new_buses
@@ -82,7 +82,8 @@ def get_dp_circuit(circuit: Circuit, transform_coordinate:bool, noise_level: str
         circuit1 = remove_bus_coordinates(circuit, switch_buses)
         for bus in circuit1.Bus:
             new_bus = copy.deepcopy(bus)
-            new_bus.X, new_bus.Y = apply_planar_laplace_noise(new_bus.X, new_bus.Y, epsilon)
+            if new_bus.X and new_bus.Y:
+                new_bus.X, new_bus.Y = apply_planar_laplace_noise(new_bus.X, new_bus.Y, epsilon)  
             new_buses.append(new_bus)
         new_circuit = copy.deepcopy(circuit)
         new_circuit.Bus = new_buses
