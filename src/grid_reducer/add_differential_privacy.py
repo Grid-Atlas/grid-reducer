@@ -36,16 +36,17 @@ def apply_planar_laplace_noise(x: float, y: float, epsilon: float) -> tuple[floa
 
 def get_dp_circuit(circuit: Circuit, transform_coordinate: bool, noise_level: str) -> Circuit:
     """
-    Adds differential privacy to the circuit by perturbing bus coordinates with Gaussian noise.
+    Adds differential privacy to the circuit by perturbing bus coordinates with noise.
 
     Args:
-        circuit (Circuit): The original circuit object.
-        positions (List): A list or mapping of bus positions, indexed by bus name.
-        noise_level (str): Specifies the strength of the noise to apply: "low", "medium", or "high".
-                          Determines the scale (standard deviation) of the Gaussian noise added.
+        circuit (Circuit): The original circuit object whose bus coordinates will be perturbed.
+        transform_coordinate (bool): If True, adds Gaussian noise to all bus coordinates.
+                                    If False, adds planar Laplace noise only to non-switch-connected bus coordinates.
+        noise_level (str): Specifies the strength of the noise: "low", "medium", or "high".
 
     Returns:
         Circuit: A new circuit object with perturbed bus coordinates.
+
     """
 
     new_buses = []
