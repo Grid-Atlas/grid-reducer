@@ -12,7 +12,7 @@ We recommend using a Python virtual environment for a clean install 🔒🐍.
 First, download the codebase to your machine:
 
 ```bash
-git clone https://tanuki.pnnl.gov/gridatlas/grid-reducer.git
+git clone https://github.com/Grid-Atlas/grid-reducer.git
 cd grid-reducer
 ```
 
