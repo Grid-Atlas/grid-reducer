@@ -47,7 +47,11 @@ class OpenDSSModelReducer:
         transformed_ckt = (
             transform_bus_coordinates(final_ckt) if transform_coordinate else final_ckt
         )
-        private_ckt = get_dp_circuit(transformed_ckt,transform_coordinate, noise_level) if noise_level != "none" else transformed_ckt
+        private_ckt = (
+            get_dp_circuit(transformed_ckt, transform_coordinate, noise_level)
+            if noise_level != "none"
+            else transformed_ckt
+        )
         renamed_ckt = rename_assets(private_ckt)
         print(f"Total Node Reductions: {len(self.ckt.Bus)}  → {len(final_ckt.Bus)}")
         print(f"Total Edge Reductions: {get_edge_count(self.ckt)}  → {get_edge_count(final_ckt)}")

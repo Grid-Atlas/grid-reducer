@@ -1,9 +1,11 @@
 import copy
 import numpy as np
 from grid_reducer.altdss.altdss_models import Circuit
-from grid_reducer.transform_coordinate import get_switch_connected_buses, remove_bus_coordinates
-from typing import List
-import math, random
+from grid_reducer.transform_coordinate import get_switch_connected_buses
+from grid_reducer.transform_coordinate import remove_bus_coordinates
+import math
+import random
+
 
 def apply_gaussian_dp_noise(value: float, std_dev: float) -> float:
     """
@@ -19,18 +21,20 @@ def apply_gaussian_dp_noise(value: float, std_dev: float) -> float:
     noise = np.random.normal(0, std_dev)  # Generate Gaussian noise centered at 0
     return value + noise
 
+
 def apply_planar_laplace_noise(x: float, y: float, epsilon: float) -> tuple[float, float]:
     # Generate random angle and radius
     theta = 2 * math.pi * random.random()
     u1, u2 = random.random(), random.random()
-    r = - (1 / epsilon) * math.log(u1 * u2)  # Radial noise from Gamma distribution
-    
+    r = -(1 / epsilon) * math.log(u1 * u2)  # Radial noise from Gamma distribution
+
     # Apply noise in polar coordinates
     x_noisy = x + r * math.cos(theta)
     y_noisy = y + r * math.sin(theta)
     return x_noisy, y_noisy
 
-def get_dp_circuit(circuit: Circuit, transform_coordinate:bool, noise_level: str) -> Circuit:
+
+def get_dp_circuit(circuit: Circuit, transform_coordinate: bool, noise_level: str) -> Circuit:
     """
     Adds differential privacy to the circuit by perturbing bus coordinates with Gaussian noise.
 
@@ -44,8 +48,7 @@ def get_dp_circuit(circuit: Circuit, transform_coordinate:bool, noise_level: str
         Circuit: A new circuit object with perturbed bus coordinates.
     """
 
-
-    new_buses= []
+    new_buses = []
     if transform_coordinate:
         # simply add noise to the bus coordinates
         match noise_level:
@@ -67,7 +70,7 @@ def get_dp_circuit(circuit: Circuit, transform_coordinate:bool, noise_level: str
         new_circuit.Bus = new_buses
         return new_circuit
     else:
-        # check for switch connected buses and do not perturb their coordinates  
+        # check for switch connected buses and do not perturb their coordinates
         match noise_level:
             case "low":
                 epsilon = 5000
@@ -83,12 +86,8 @@ def get_dp_circuit(circuit: Circuit, transform_coordinate:bool, noise_level: str
         for bus in circuit1.Bus:
             new_bus = copy.deepcopy(bus)
             if new_bus.X and new_bus.Y:
-                new_bus.X, new_bus.Y = apply_planar_laplace_noise(new_bus.X, new_bus.Y, epsilon)  
+                new_bus.X, new_bus.Y = apply_planar_laplace_noise(new_bus.X, new_bus.Y, epsilon)
             new_buses.append(new_bus)
         new_circuit = copy.deepcopy(circuit)
         new_circuit.Bus = new_buses
         return new_circuit
-        
-    
-    
-     
