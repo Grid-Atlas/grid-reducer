@@ -1,10 +1,12 @@
 import copy
+import math
+import random
+
 import numpy as np
+
 from grid_reducer.altdss.altdss_models import Circuit
 from grid_reducer.transform_coordinate import get_switch_connected_buses
 from grid_reducer.transform_coordinate import remove_bus_coordinates
-import math
-import random
 
 
 def apply_gaussian_dp_noise(value: float, std_dev: float) -> float:
