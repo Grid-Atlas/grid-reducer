@@ -48,7 +48,7 @@ class OpenDSSModelReducer:
             transform_bus_coordinates(final_ckt) if transform_coordinate else final_ckt
         )
         private_ckt = (
-            get_dp_circuit(transformed_ckt, transform_coordinate, noise_level)
+            get_dp_circuit(transformed_ckt, noise_level)
             if noise_level != "none"
             else transformed_ckt
         )
