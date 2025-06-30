@@ -1,54 +1,42 @@
 import copy
 import math
 import random
-from dataclasses import dataclass
-from typing import Union, Literal
+from abc import ABC
 
 import numpy as np
 
 from grid_reducer.altdss.altdss_models import Circuit
 
 
-@dataclass
-class NoiseSetting:
-    type: Literal["geo_coordinate", "non_geo_coordinate"]
-    value: Union[int, float]
+class BasePrivacyConfig(ABC):
+    geo_coordinate_noise = None
+    non_geo_coordinate_noise = None
 
 
-GEO_COORDINATE_NOISE_SETTINGS = {
-    "low": NoiseSetting(type="geo_coordinate", value=5000),
-    "medium": NoiseSetting(type="geo_coordinate", value=3500),
-    "high": NoiseSetting(type="geo_coordinate", value=2000),
-}
+class LowPrivacyConfig(BasePrivacyConfig):
+    geo_coordinate_noise = 5000
+    non_geo_coordinate_noise = 0.01
 
 
-NON_GEO_COORDINATE_NOISE_SETTINGS = {
-    "low": NoiseSetting(type="non_geo_coordinate", value=0.01),
-    "medium": NoiseSetting(type="non_geo_coordinate", value=0.05),
-    "high": NoiseSetting(type="non_geo_coordinate", value=0.1),
-}
+class MediumPrivacyConfig(BasePrivacyConfig):
+    geo_coordinate_noise = 3500
+    non_geo_coordinate_noise = 0.05
+
+
+class HighPrivacyConfig(BasePrivacyConfig):
+    geo_coordinate_noise = 2000
+    non_geo_coordinate_noise = 0.1
 
 
 def apply_gaussian_dp_noise(value: float, std_dev: float) -> float:
-    """
-    Add Gaussian noise to a value, based on the given standard deviation.
-
-    Args:
-        value (float): Original value to perturb.
-        std_dev (float): Standard deviation of the Gaussian noise.
-
-    Returns:
-        float: Perturbed value with Gaussian noise applied.
-    """
-    noise = np.random.normal(0, std_dev)  # Generate Gaussian noise centered at 0
+    noise = np.random.normal(0, std_dev)
     return value + noise
 
 
 def apply_planar_laplace_noise(x: float, y: float, epsilon: float) -> tuple[float, float]:
-    # Generate random angle and radius
     theta = 2 * math.pi * random.random()
     u1, u2 = random.random(), random.random()
-    r = -(1 / epsilon) * math.log(u1 * u2)  # Radial noise from Gamma distribution
+    r = -(1 / epsilon) * math.log(u1 * u2)
 
     # Apply noise in polar coordinates
     x_noisy = x + r * math.cos(theta)
@@ -72,7 +60,17 @@ def is_geo_coordinate(x: float, y: float) -> bool:
     return geo_bounds and not is_transformed
 
 
-def get_dp_circuit(circuit: Circuit, noise_level: str) -> Circuit:
+def check_if_circuit_is_geo(circuit: Circuit) -> bool:
+    for bus in circuit.Bus:
+        if bus.X is not None and bus.Y is not None:
+            if not is_geo_coordinate(bus.X, bus.Y):
+                return False
+        else:
+            return False
+    return True
+
+
+def get_dp_circuit(circuit: Circuit, noise_config: BasePrivacyConfig) -> Circuit:
     """
     Applies differential privacy to all bus coordinates:
     - Planar Laplace noise for all geo-coordinates (including switch-connected)
@@ -86,35 +84,20 @@ def get_dp_circuit(circuit: Circuit, noise_level: str) -> Circuit:
         Circuit: New circuit with perturbed bus coordinates
     """
 
-    geo_config = GEO_COORDINATE_NOISE_SETTINGS.get(
-        noise_level, GEO_COORDINATE_NOISE_SETTINGS["low"]
-    )
-    non_geo_config = NON_GEO_COORDINATE_NOISE_SETTINGS.get(
-        noise_level, NON_GEO_COORDINATE_NOISE_SETTINGS["low"]
-    )
-
     new_buses = []
-    geo_count = 0
-    non_geo_count = 0
-
+    is_geo = check_if_circuit_is_geo(circuit)
     for bus in circuit.Bus:
         new_bus = copy.deepcopy(bus)
-
         if new_bus.X is not None and new_bus.Y is not None:
-            if is_geo_coordinate(new_bus.X, new_bus.Y):
+            if is_geo:
                 new_bus.X, new_bus.Y = apply_planar_laplace_noise(
-                    new_bus.X, new_bus.Y, int(geo_config.value)
+                    new_bus.X, new_bus.Y, int(noise_config.geo_coordinate_noise)
                 )
-                geo_count += 1
             else:
-                noise_scale = float(non_geo_config.value)
+                noise_scale = float(noise_config.non_geo_coordinate_noise)
                 new_bus.X = apply_gaussian_dp_noise(new_bus.X, noise_scale)
                 new_bus.Y = apply_gaussian_dp_noise(new_bus.Y, noise_scale)
-                non_geo_count += 1
-
         new_buses.append(new_bus)
-
-    # print(f"Processed {geo_count} geo-coordinates and {non_geo_count} non-geo coordinates")
 
     new_circuit = copy.deepcopy(circuit)
     new_circuit.Bus = new_buses

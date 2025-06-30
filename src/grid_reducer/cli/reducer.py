@@ -3,6 +3,19 @@ from pathlib import Path
 import click
 
 from grid_reducer.reducer import OpenDSSModelReducer
+from grid_reducer.add_differential_privacy import (
+    LowPrivacyConfig,
+    MediumPrivacyConfig,
+    HighPrivacyConfig,
+)
+
+
+noise_class_mapping = {
+    "low": LowPrivacyConfig,
+    "moderate": MediumPrivacyConfig,
+    "high": HighPrivacyConfig,
+    "none": None,
+}
 
 
 @click.command()
@@ -78,7 +91,7 @@ def reduce(
         reduce_secondary=remove_secondary,
         aggregate_primary=aggregate_primary,
         transform_coordinate=transform_coordinate,
-        noise_level=noise_level,
+        noise_config=noise_class_mapping.get(noise_level),
     )
     reducer_obj.export(reduced_ckt, reduced_ckt_output_file)
     if export_original:
