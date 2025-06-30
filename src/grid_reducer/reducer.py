@@ -6,7 +6,7 @@ from grid_reducer.altdss.altdss_models import Circuit
 from grid_reducer.aggregate_secondary import aggregate_secondary_assets
 from grid_reducer.aggregate_primary import aggregate_primary_conductors
 from grid_reducer.utils import write_to_opendss_file
-from grid_reducer.transform_coordinate import transform_bus_coordinates
+from grid_reducer.transform_coordinate import transform_bus_coordinates, get_switch_connected_buses
 from grid_reducer.add_differential_privacy import get_dp_circuit, BasePrivacyConfig
 from grid_reducer.rename_components import rename_assets
 
@@ -45,11 +45,14 @@ class OpenDSSModelReducer:
         else:
             final_ckt = reduced_ckt
 
+        has_switches = get_switch_connected_buses(final_ckt)
         transformed_ckt = (
             transform_bus_coordinates(final_ckt) if transform_coordinate else final_ckt
         )
         private_ckt = (
-            get_dp_circuit(transformed_ckt, noise_config()) if noise_config else transformed_ckt
+            get_dp_circuit(transformed_ckt, noise_config())
+            if noise_config and has_switches
+            else transformed_ckt
         )
         renamed_ckt = rename_assets(private_ckt)
         print(f"Total Node Reductions: {len(self.ckt.Bus)}  → {len(final_ckt.Bus)}")
