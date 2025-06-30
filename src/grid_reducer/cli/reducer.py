@@ -3,6 +3,19 @@ from pathlib import Path
 import click
 
 from grid_reducer.reducer import OpenDSSModelReducer
+from grid_reducer.add_differential_privacy import (
+    LowPrivacyConfig,
+    MediumPrivacyConfig,
+    HighPrivacyConfig,
+)
+
+
+noise_class_mapping = {
+    "low": LowPrivacyConfig,
+    "moderate": MediumPrivacyConfig,
+    "high": HighPrivacyConfig,
+    "none": None,
+}
 
 
 @click.command()
@@ -34,6 +47,13 @@ from grid_reducer.reducer import OpenDSSModelReducer
     help="Boolean flag indicating whether to transform coordinates or not.",
 )
 @click.option(
+    "-nl",
+    "--noise-level",
+    type=click.Choice(["low", "moderate", "high", "none"], case_sensitive=True),
+    default="low",
+    help="Str indicating the noise level to be added to the coordinates. Options are 'low', 'medium', 'high', 'none'. Default is 'low'.",
+)
+@click.option(
     "-eo",
     "--export-original",
     type=click.BOOL,
@@ -59,6 +79,7 @@ def reduce(
     remove_secondary: bool,
     aggregate_primary: bool,
     transform_coordinate: bool,
+    noise_level: str,
     export_original: bool,
     reduced_ckt_output_file: str,
     original_ckt_output_file: str,
@@ -70,6 +91,7 @@ def reduce(
         reduce_secondary=remove_secondary,
         aggregate_primary=aggregate_primary,
         transform_coordinate=transform_coordinate,
+        noise_config=noise_class_mapping.get(noise_level),
     )
     reducer_obj.export(reduced_ckt, reduced_ckt_output_file)
     if export_original:

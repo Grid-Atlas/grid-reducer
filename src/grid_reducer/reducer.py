@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Type
 
 from grid_reducer.utils import get_ckt_from_opendss_model, print_summary_to_cli
 from grid_reducer.altdss.altdss_models import Circuit
@@ -6,6 +7,7 @@ from grid_reducer.aggregate_secondary import aggregate_secondary_assets
 from grid_reducer.aggregate_primary import aggregate_primary_conductors
 from grid_reducer.utils import write_to_opendss_file
 from grid_reducer.transform_coordinate import transform_bus_coordinates
+from grid_reducer.add_differential_privacy import get_dp_circuit, BasePrivacyConfig
 from grid_reducer.rename_components import rename_assets
 
 
@@ -29,6 +31,7 @@ class OpenDSSModelReducer:
         reduce_secondary: bool = True,
         aggregate_primary: bool = True,
         transform_coordinate: bool = True,
+        noise_config: Type[BasePrivacyConfig] | None = None,
     ) -> Circuit:
         if reduce_secondary:
             reduced_ckt, summary = aggregate_secondary_assets(self.ckt)
@@ -45,7 +48,10 @@ class OpenDSSModelReducer:
         transformed_ckt = (
             transform_bus_coordinates(final_ckt) if transform_coordinate else final_ckt
         )
-        renamed_ckt = rename_assets(transformed_ckt)
+        private_ckt = (
+            get_dp_circuit(transformed_ckt, noise_config()) if noise_config else transformed_ckt
+        )
+        renamed_ckt = rename_assets(private_ckt)
         print(f"Total Node Reductions: {len(self.ckt.Bus)}  → {len(final_ckt.Bus)}")
         print(f"Total Edge Reductions: {get_edge_count(self.ckt)}  → {get_edge_count(final_ckt)}")
         return renamed_ckt
