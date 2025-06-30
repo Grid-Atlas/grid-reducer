@@ -1,14 +1,13 @@
 import copy
 import math
 import random
-from abc import ABC
 
 import numpy as np
 
 from grid_reducer.altdss.altdss_models import Circuit
 
 
-class BasePrivacyConfig(ABC):
+class BasePrivacyConfig:
     geo_coordinate_noise = None
     non_geo_coordinate_noise = None
 
@@ -60,14 +59,19 @@ def is_geo_coordinate(x: float, y: float) -> bool:
     return geo_bounds and not is_transformed
 
 
+def check_if_all_coords_are_none(circuit: Circuit) -> bool:
+    for bus in circuit.Bus:
+        if bus.X is not None or bus.Y is not None:
+            return False
+    return True
+
+
 def check_if_circuit_is_geo(circuit: Circuit) -> bool:
     for bus in circuit.Bus:
         if bus.X is not None and bus.Y is not None:
             if not is_geo_coordinate(bus.X, bus.Y):
                 return False
-        else:
-            return False
-    return True
+    return False if check_if_all_coords_are_none(circuit) else True
 
 
 def get_dp_circuit(circuit: Circuit, noise_config: BasePrivacyConfig) -> Circuit:
