@@ -33,7 +33,7 @@ def remove_bus_coordinates(circuit: Circuit, preserve_buses: list[str] | None):
 
     new_buses = []
     for bus in circuit.Bus:
-        if bus.Name in preserve_buses:
+        if bus.Name not in preserve_buses:
             new_bus = copy.deepcopy(bus)
             new_bus.X = None
             new_bus.Y = None
