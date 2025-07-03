@@ -42,7 +42,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: Grid-Atlas/grid-meta
+          slug: Grid-Atlas/grid-reducer
           fail_ci_if_error: false
           verbose: true
 
