@@ -10,20 +10,7 @@
 Welcome! Follow the steps below to get `grid-reducer` up and running locally.  
 We recommend using a Python virtual environment for a clean install 🔒🐍.
 
-> 💡 **Note:** In the future, `grid-reducer` may be installable directly via `pip install grid-reducer`. For now, follow the instructions below.
-
----
-
-## 📦 Step 1: Clone the Repository
-
-First, download the codebase to your machine:
-
-```bash
-git clone https://github.com/Grid-Atlas/grid-reducer.git
-cd grid-reducer
-```
-
-## 🧪 Step 2: Set Up a Python Environment
+## 🧪 Step 1: Set Up a Python Environment
 
 To avoid dependency conflicts, create and activate a virtual environment.
 
@@ -45,12 +32,12 @@ conda activate grid-reducer-env
 
 </details>
 
-## 🚀 Step 3: Install the Project Locally
+## 🚀 Step 2: Install the Project Locally
 
 Install the project in editable mode so changes to the code reflect immediately:
 
 ```bash
-pip install -e .
+pip install grid_reducer
 ```
 
 ✅ This will also install all required dependencies.
