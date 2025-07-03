@@ -36,6 +36,14 @@ jobs:
         run: ruff check src 
         
       - name: Run tests with coverage
-        run: pytest .
+        run: pytest --cov --cov-branch --cov-report=xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Grid-Atlas/grid-reducer
+          fail_ci_if_error: false
+          verbose: true
 
       

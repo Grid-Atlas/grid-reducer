@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.0.0-draft] - 2025-06-06
+## [1.0.0] - 2025-07-03
 
 ### Added
 
