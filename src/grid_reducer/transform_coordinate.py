@@ -13,6 +13,8 @@ def get_switch_connected_buses(circuit) -> set[str]:
     Returns a set of buses that are connected by switches, considering both
     SwtControl objects and Line elements with Switch=True/y/yes.
     """
+    if not circuit.Line:
+        return []
     buses_to_preserve = set()
     lines_that_are_switch = set()
 
@@ -27,14 +29,13 @@ def get_switch_connected_buses(circuit) -> set[str]:
     for line in circuit.Line.root.root:
         name = getattr(line.root, "Name", "")
         # Check if this line is a switch by SwtControl or by Switch property
-        is_switch_line = name in lines_that_are_switch or str(
-            getattr(line.root, "Switch", "")
-        ).lower() in ("y", "yes", "true", "1")
+        is_switch_line = (
+            name in lines_that_are_switch or line.root.Enabled is False or line.root.Switch
+        )
         if is_switch_line:
             bus1 = extract_bus_name(getattr(line.root, "Bus1", ""))
             bus2 = extract_bus_name(getattr(line.root, "Bus2", ""))
             buses_to_preserve.update([bus1, bus2])
-
     return buses_to_preserve
 
 
