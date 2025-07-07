@@ -1,6 +1,7 @@
 import os
 
 import s3fs
+from tqdm import tqdm
 
 
 def download_s3_folder(bucket_name: str, prefix: str, local_dir: str):
@@ -25,7 +26,7 @@ def download_s3_folder(bucket_name: str, prefix: str, local_dir: str):
     os.makedirs(local_dir, exist_ok=True)
 
     # Download each file
-    for file in files:
+    for file in tqdm(files, desc="Downloading files", unit="file"):
         relative_path = file.replace(s3_path, "")  # Remove bucket prefix
         local_file_path = os.path.join(local_dir, relative_path)
 
@@ -34,4 +35,4 @@ def download_s3_folder(bucket_name: str, prefix: str, local_dir: str):
 
         # Download the file
         s3.get(file, local_file_path)
-        print(f"Downloaded: {file} -> {local_file_path}")
+        # print(f"Downloaded: {file} -> {local_file_path}")

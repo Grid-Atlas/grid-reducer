@@ -49,6 +49,7 @@ class OpenDSSModelReducer:
         transformed_ckt = (
             transform_bus_coordinates(final_ckt) if transform_coordinate else final_ckt
         )
+        print(f"Has Switches: {has_switches}")
         private_ckt = (
             get_dp_circuit(transformed_ckt, noise_config())
             if noise_config and has_switches
