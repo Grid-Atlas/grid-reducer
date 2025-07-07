@@ -8,25 +8,6 @@ from grid_reducer.network import get_graph_from_circuit
 from grid_reducer.utils import extract_bus_name
 
 
-def get_switch_connected_buses_old(circuit: Circuit) -> list[str]:
-    if not circuit.Line:
-        return []
-
-    buses_to_preserve = set()
-    lines_that_are_switch = []
-    if circuit.SwtControl:
-        for switch in circuit.SwtControl.root.root:
-            if switch.SwitchedObj:
-                lines_that_are_switch.append(switch.SwitchedObj.replace("Line.", ""))
-    for line in circuit.Line.root.root:
-        if line.root.Name in lines_that_are_switch or line.root.Enabled is False:
-            bus1 = extract_bus_name(line.root.Bus1)
-            bus2 = extract_bus_name(line.root.Bus2)
-            buses_to_preserve.update([bus1, bus2])
-
-    return buses_to_preserve
-
-
 def get_switch_connected_buses(circuit) -> set[str]:
     """
     Returns a set of buses that are connected by switches, considering both
