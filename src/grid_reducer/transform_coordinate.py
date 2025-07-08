@@ -8,7 +8,7 @@ from grid_reducer.network import get_graph_from_circuit
 from grid_reducer.utils import extract_bus_name
 
 
-def get_switch_connected_buses(circuit) -> set[str]:
+def get_switch_connected_buses(circuit: Circuit) -> set[str]:
     """
     Returns a set of buses that are connected by switches, considering both
     SwtControl objects and Line elements with Switch=True/y/yes.
@@ -18,19 +18,17 @@ def get_switch_connected_buses(circuit) -> set[str]:
     buses_to_preserve = set()
     lines_that_are_switch = set()
 
-    # 1. Find lines controlled by SwtControl objects
-    if hasattr(circuit, "SwtControl") and circuit.SwtControl:
+    if circuit.SwtControl:
         for switch in circuit.SwtControl.root.root:
-            if hasattr(switch, "SwitchedObj") and switch.SwitchedObj:
-                # Remove "Line." prefix if present
-                lines_that_are_switch.add(switch.SwitchedObj.replace("Line.", ""))
+            if not switch.SwitchedObj:
+                continue
+            lines_that_are_switch.add(switch.SwitchedObj.replace("Line.", ""))
 
-    # 2. Iterate over all lines
     for line in circuit.Line.root.root:
-        name = getattr(line.root, "Name", "")
-        # Check if this line is a switch by SwtControl or by Switch property
         is_switch_line = (
-            name in lines_that_are_switch or line.root.Enabled is False or line.root.Switch
+            line.root.Name in lines_that_are_switch
+            or line.root.Enabled is False
+            or line.root.Switch
         )
         if is_switch_line:
             bus1 = extract_bus_name(getattr(line.root, "Bus1", ""))
